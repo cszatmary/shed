@@ -17,7 +17,7 @@ type rootOptions struct {
 var (
 	rootOpts rootOptions
 	shed     *client.Shed
-	logger   = logrus.New()
+	logger   = logrus.StandardLogger()
 )
 
 var rootCmd = &cobra.Command{

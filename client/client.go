@@ -116,25 +116,20 @@ func (s *Shed) Install(allowUpdates bool, toolNames ...string) error {
 
 	var errs lockfile.ErrorList
 	for _, toolName := range toolNames {
-		t, err := tool.Parse(toolName)
-		if err != nil {
-			errs = append(errs, err)
-			continue
-		}
-
-		existingTool, err := s.lf.GetTool(t.ImportPath)
+		t, err := s.lf.GetTool(toolName)
 		switch {
 		case errors.Is(err, lockfile.ErrNotFound):
 			// New tool, will be installed
 		case errors.Is(err, lockfile.ErrIncorrectVersion):
 			if !allowUpdates {
-				err := errors.Errorf("trying to install version %s but lockfile has version %s for tool %s", t.Version, existingTool.Version, t.ImportPath)
+				err := errors.Errorf("trying to install a different version of %s then what is in the lockfile", t.ImportPath)
 				errs = append(errs, err)
 				continue
 			}
 		default:
 			// Shouldn't happen, but handle just to be safe
-			return errors.WithMessagef(err, "failed to check if tool exists in lockfile: %s", t)
+			errs = append(errs, errors.WithMessagef(err, "failed to check if tool exists in lockfile: %s", t))
+			continue
 		}
 		seenTools[t.ImportPath] = true
 		tools = append(tools, t)
@@ -165,6 +160,36 @@ func (s *Shed) Install(allowUpdates bool, toolNames ...string) error {
 			return errors.WithMessagef(err, "failed to install tool %s", t)
 		}
 		s.lf.PutTool(installedTool)
+	}
+
+	if err := s.writeLockfile(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Uninstall uninstalls the given tools. This only removes them from the lockfile.
+// The actual tool binaries are not removed, since they might be used by other projects.
+// To remove the actual binaries, use CleanCache.
+func (s *Shed) Uninstall(toolNames ...string) error {
+	var tools []tool.Tool
+	var errs lockfile.ErrorList
+	for _, toolName := range toolNames {
+		t, err := s.lf.GetTool(toolName)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		tools = append(tools, t)
+	}
+
+	if len(errs) > 0 {
+		return errs
+	}
+
+	for _, t := range tools {
+		s.logger.Debugf("Uninstalling tool: %v", t)
+		s.lf.DeleteTool(t)
 	}
 
 	if err := s.writeLockfile(); err != nil {
