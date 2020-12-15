@@ -4,6 +4,8 @@ SHED = ./shed
 # Get all dependencies
 setup:
 	@go mod download
+# shed must be built first, so we can use it for tools
+	@go build -o $(SHED)
 # Self-hoisted!
 	@$(SHED) install
 	@$(SHED) run go-fish install

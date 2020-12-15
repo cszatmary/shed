@@ -83,7 +83,7 @@ func (t Tool) BinaryFilepath() (string, error) {
 	return filepath.Join(fp, t.Name()), nil
 }
 
-// Parse parse the given tool name. Name must be a valid import path,
+// Parse parses the given tool name. Name must be a valid import path,
 // optionally with a version. If a version is provided, the format must be
 // 'ImportPath@Version', just like what would be passed to a command like 'go get'.
 func Parse(name string) (Tool, error) {
