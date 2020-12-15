@@ -14,6 +14,7 @@ setup:
 # Build shed
 build:
 	go build
+	go run build/main.go
 .PHONY: build
 
 # Clean all build artifacts

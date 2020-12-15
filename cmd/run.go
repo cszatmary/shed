@@ -1,12 +1,13 @@
 package cmd
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 
 	"github.com/TouchBistro/goutils/fatal"
-	"github.com/cszatmary/shed/api"
-	log "github.com/sirupsen/logrus"
+	"github.com/cszatmary/shed/lockfile"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
@@ -30,12 +31,16 @@ Or:
 	`,
 	Run: func(cmd *cobra.Command, args []string) {
 		toolName := args[0]
-		binPath, err := api.BinaryPath(toolName)
-		if err != nil {
+		binPath, err := shed.ToolPath(toolName)
+		if errors.Is(err, lockfile.ErrNotFound) {
+			fatal.Exitf("No tool named %s installed. Run 'shed install' first to install the tool", toolName)
+		} else if errors.Is(err, lockfile.ErrMultipleTools) {
+			fatal.Exitf("Multiple tools named %s found. Specify the full import path of the tool in order to run it.", toolName)
+		} else if err != nil {
 			fatal.ExitErrf(err, "Failed to run tool %s", toolName)
 		}
 
-		log.WithFields(log.Fields{
+		logger.WithFields(logrus.Fields{
 			"tool": toolName,
 			"path": binPath,
 		}).Debugf("Found path for tool")

@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"github.com/TouchBistro/goutils/spinner"
-	"github.com/cszatmary/shed/api"
 	"github.com/spf13/cobra"
 )
 
@@ -21,7 +20,7 @@ var installCmd = &cobra.Command{
 		failedCh := make(chan error)
 
 		go func() {
-			err := api.Install(installOpts.allowUpdates, args...)
+			err := shed.Install(installOpts.allowUpdates, args...)
 			if err != nil {
 				failedCh <- err
 				return
