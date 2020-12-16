@@ -11,7 +11,7 @@ import (
 var cacheCmd = &cobra.Command{
 	Use:   "cache",
 	Short: "Manage cached tools.",
-	Long: `cache managed the cache that contains installed tools.
+	Long: `shed cache manages the cache that contains installed tools.
 
 'shed cache dir' can be used to print the path to the shed cache.
 'shed cache clean' can be used to clean the cache and remove all tools.`,

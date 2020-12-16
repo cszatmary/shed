@@ -215,11 +215,8 @@ func (c *Cache) download(t tool.Tool) (tool.Tool, error) {
 	// we need to figure out what the latest version is
 
 	// Use import path without version and download latest version
-	if !file.FileOrDirExists(modDir) {
-		err := os.MkdirAll(modDir, 0o755)
-		if err != nil {
-			return t, errors.Wrapf(err, "failed to create directory %q", modDir)
-		}
+	if err := os.MkdirAll(modDir, 0o755); err != nil {
+		return t, errors.Wrapf(err, "failed to create directory %q", modDir)
 	}
 
 	// If modfile already exists, delete it and create a fresh one to be safe since

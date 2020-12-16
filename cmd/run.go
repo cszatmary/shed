@@ -27,8 +27,7 @@ For example to run the stringer tool you can either run:
 
 Or:
 
-	shed run golang.org/x/tools/cmd/stringer -- -type=Pill
-	`,
+	shed run golang.org/x/tools/cmd/stringer -- -type=Pill`,
 	Run: func(cmd *cobra.Command, args []string) {
 		toolName := args[0]
 		binPath, err := shed.ToolPath(toolName)
