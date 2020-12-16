@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/TouchBistro/goutils/fatal"
 	"github.com/cszatmary/shed/lockfile"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"

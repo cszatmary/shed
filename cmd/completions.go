@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/TouchBistro/goutils/fatal"
 	"github.com/spf13/cobra"
 )
 

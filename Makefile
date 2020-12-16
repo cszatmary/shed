@@ -1,5 +1,6 @@
 .DEFAULT_GOAL = build
 SHED = ./shed
+COVERPKGS = ./cache,./client,./internal/util,./lockfile,./tool
 
 # Get all dependencies
 setup:
@@ -40,13 +41,13 @@ go-uninstall:
 # Run tests and collect coverage data
 test:
 	@mkdir -p coverage
-	@go test -coverpkg=./... -coverprofile=coverage/coverage.txt ./...
+	@go test -coverpkg=$(COVERPKGS) -coverprofile=coverage/coverage.txt ./...
 	@go tool cover -html=coverage/coverage.txt -o coverage/coverage.html
 .PHONY: test
 
 # Run tests and print coverage data to stdout
 test-ci:
 	@mkdir -p coverage
-	@go test -coverpkg=./... -coverprofile=coverage/coverage.txt ./...
+	@go test -coverpkg=$(COVERPKGS) -coverprofile=coverage/coverage.txt ./...
 	@go tool cover -func=coverage/coverage.txt
 .PHONY: test-ci

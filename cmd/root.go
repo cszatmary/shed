@@ -1,8 +1,8 @@
 package cmd
 
 import (
-	"github.com/TouchBistro/goutils/fatal"
 	"github.com/cszatmary/shed/client"
+	"github.com/cszatmary/shed/internal/util"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -18,6 +18,7 @@ var (
 	rootOpts rootOptions
 	shed     *client.Shed
 	logger   = logrus.StandardLogger()
+	fatal    = util.Fatal{}
 )
 
 var rootCmd = &cobra.Command{
@@ -25,7 +26,7 @@ var rootCmd = &cobra.Command{
 	Version: version,
 	Short:   "shed is a CLI for easily managing Go tool dependencies.",
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		fatal.ShowStackTraces(rootOpts.verbose)
+		fatal.ShowErrorDetail = rootOpts.verbose
 		if rootOpts.verbose {
 			logger.SetLevel(logrus.DebugLevel)
 		}
@@ -38,7 +39,7 @@ var rootCmd = &cobra.Command{
 			Logger: logger,
 		})
 		if err != nil {
-			fatal.ExitErr(err, "Failed to setup shed")
+			fatal.ExitErrf(err, "Failed to setup shed")
 		}
 	},
 }
@@ -50,6 +51,6 @@ func init() {
 // Execute runs the shed CLI.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fatal.ExitErr(err, "Failed executing command.")
+		fatal.ExitErrf(err, "Failed executing command.")
 	}
 }

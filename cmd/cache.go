@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/TouchBistro/goutils/fatal"
 	"github.com/spf13/cobra"
 )
 
@@ -24,7 +23,7 @@ var cacheCleanCmd = &cobra.Command{
 This is useful for removing any stale tools that are no longer needed.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := os.RemoveAll(shed.CacheDir()); err != nil {
-			fatal.ExitErr(err, "Failed to clean cache directory")
+			fatal.ExitErrf(err, "Failed to clean cache directory")
 		}
 	},
 }

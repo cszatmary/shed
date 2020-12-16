@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/TouchBistro/goutils/file"
 	"github.com/cszatmary/shed/cache"
+	"github.com/cszatmary/shed/internal/util"
 	"github.com/cszatmary/shed/lockfile"
 	"github.com/cszatmary/shed/tool"
 	"github.com/pkg/errors"
@@ -56,7 +56,7 @@ func NewShed(opts Options) (*Shed, error) {
 	}
 
 	lf := &lockfile.Lockfile{}
-	if file.FileOrDirExists(opts.LockfilePath) {
+	if util.FileOrDirExists(opts.LockfilePath) {
 		f, err := os.Open(opts.LockfilePath)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to open file %s", opts.LockfilePath)
@@ -116,13 +116,19 @@ func (s *Shed) Install(allowUpdates bool, toolNames ...string) error {
 
 	var errs lockfile.ErrorList
 	for _, toolName := range toolNames {
-		t, err := s.lf.GetTool(toolName)
+		// This also serves to validate the the given tool name is a valid module name
+		t, err := tool.Parse(toolName)
+		if err != nil {
+			errs = append(errs, errors.WithMessagef(err, "invalid tool name %s", toolName))
+		}
+
+		existing, err := s.lf.GetTool(toolName)
 		switch {
 		case errors.Is(err, lockfile.ErrNotFound):
 			// New tool, will be installed
 		case errors.Is(err, lockfile.ErrIncorrectVersion):
 			if !allowUpdates {
-				err := errors.Errorf("trying to install a different version of %s then what is in the lockfile", t.ImportPath)
+				err := errors.Errorf("trying to install %s, but %s is in the lockfile", t, existing.Version)
 				errs = append(errs, err)
 				continue
 			}

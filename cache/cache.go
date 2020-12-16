@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/TouchBistro/goutils/file"
+	"github.com/cszatmary/shed/internal/util"
 	"github.com/cszatmary/shed/tool"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -82,7 +82,7 @@ func (c *Cache) Install(t tool.Tool) (tool.Tool, error) {
 	binPath := filepath.Join(baseDir, bfp)
 
 	// Check if already built
-	if file.FileOrDirExists(binPath) {
+	if util.FileOrDirExists(binPath) {
 		c.logger.WithFields(logrus.Fields{
 			"tool": downloadedTool,
 			"path": binPath,
@@ -124,7 +124,7 @@ func (c *Cache) download(t tool.Tool) (tool.Tool, error) {
 
 	// If we have the version the process is pretty easy
 	if t.Version != "" {
-		if file.FileOrDirExists(modfilePath) {
+		if util.FileOrDirExists(modfilePath) {
 			// If go.mod already exists, make sure there's no issues with it
 			data, err := ioutil.ReadFile(modfilePath)
 			if err != nil {
@@ -221,7 +221,7 @@ func (c *Cache) download(t tool.Tool) (tool.Tool, error) {
 
 	// If modfile already exists, delete it and create a fresh one to be safe since
 	// it's likely a leftover that wasn't cleaned up properly
-	if file.FileOrDirExists(modfilePath) {
+	if util.FileOrDirExists(modfilePath) {
 		err := os.Remove(modfilePath)
 		if err != nil {
 			return t, errors.Wrapf(err, "failed to remove file %q", modfilePath)
@@ -260,12 +260,13 @@ func (c *Cache) download(t tool.Tool) (tool.Tool, error) {
 	t.Version = gomod.Require[0].Mod.Version
 
 	// We got the version, now we need to rename the dir so it includes the version
-	modVersionDir, err := t.Filepath()
+	vfp, err := t.Filepath()
 	if err != nil {
 		return t, err
 	}
 
-	if file.FileOrDirExists(modVersionDir) {
+	modVersionDir := filepath.Join(c.toolsDir(), vfp)
+	if util.FileOrDirExists(modVersionDir) {
 		// This version was already installed
 		// We can leave the current dir, since future latest installs will
 		// make use of it
@@ -294,7 +295,7 @@ func (c *Cache) ToolPath(t tool.Tool) (string, error) {
 	}
 
 	binPath := filepath.Join(baseDir, bfp)
-	if !file.FileOrDirExists(binPath) {
+	if !util.FileOrDirExists(binPath) {
 		return "", errors.Errorf("binary for tool %s does not exist", t)
 	}
 	return binPath, nil
