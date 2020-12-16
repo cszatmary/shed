@@ -24,20 +24,19 @@ Or:
 
 	shed uninstall golang.org/x/tools/cmd/stringer`,
 	Run: func(cmd *cobra.Command, args []string) {
-		successCh := make(chan string)
-		failedCh := make(chan error)
+		s := spinner.New(spinner.Options{
+			Suffix: " Installing tools",
+		})
+		if !rootOpts.verbose {
+			s.Start()
+		}
 
-		go func() {
-			err := shed.Uninstall(args...)
-			if err != nil {
-				failedCh <- err
-				return
-			}
-
-			successCh <- "Finished uninstalling tools"
-		}()
-
-		spinner.SpinnerWait(successCh, failedCh, "%s", "Failed to uninstall tools", 1)
+		err := shed.Uninstall(args...)
+		s.Stop()
+		if err != nil {
+			fatal.ExitErrf(err, "Failed to uninstall tools")
+		}
+		logger.Info("Finished uninstalling tools")
 	},
 }
 

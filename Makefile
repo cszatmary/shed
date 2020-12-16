@@ -1,6 +1,6 @@
 .DEFAULT_GOAL = build
 SHED = ./shed
-COVERPKGS = ./cache,./client,./internal/util,./lockfile,./tool
+COVERPKGS = ./cache,./client,./internal/spinner,./internal/util,./lockfile,./tool
 
 # Get all dependencies
 setup:
