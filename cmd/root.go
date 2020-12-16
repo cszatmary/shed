@@ -53,8 +53,3 @@ func Execute() {
 		fatal.ExitErr(err, "Failed executing command.")
 	}
 }
-
-// Root returns the root CLI command.
-func Root() *cobra.Command {
-	return rootCmd
-}

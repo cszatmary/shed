@@ -14,7 +14,10 @@ setup:
 # Build shed
 build:
 	@go build
-	@go run build/main.go
+# Generate shell completions for distribution
+	@mkdir -p dist
+	@$(SHED) completions bash > dist/shed.bash
+	@$(SHED) completions zsh > dist/_shed
 .PHONY: build
 
 # Clean all build artifacts
