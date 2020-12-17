@@ -1,0 +1,13 @@
+{
+  "tools": {
+    "github.com/cszatmary/go-fish": {
+      "version": "v0.0.0-20201203230243-22d10c9b658d"
+    },
+    "github.com/golangci/golangci-lint/cmd/golangci-lint": {
+      "version": "v1.33.0"
+    },
+    "github.com/goreleaser/goreleaser": {
+      "version": "v0.149.0"
+    }
+  }
+}
