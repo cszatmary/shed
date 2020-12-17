@@ -4,8 +4,10 @@ COVERPKGS = ./cache,./client,./internal/spinner,./internal/util,./lockfile,./too
 
 # Get all dependencies
 setup:
+	@echo Installing dependencies
 	@go mod download
 # Self-hoisted!
+	@echo Installing tool dependencies
 	@$(SHED) install
 	@$(SHED) run go-fish install
 .PHONY: setup
