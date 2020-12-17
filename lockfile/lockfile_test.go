@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cszatmary/shed/lockfile"
-	"github.com/cszatmary/shed/tool"
+	"github.com/getshiphub/shed/lockfile"
+	"github.com/getshiphub/shed/tool"
 )
 
 func TestLockfileGet(t *testing.T) {

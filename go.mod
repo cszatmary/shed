@@ -1,4 +1,4 @@
-module github.com/cszatmary/shed
+module github.com/getshiphub/shed
 
 go 1.15
 

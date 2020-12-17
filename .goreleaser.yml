@@ -18,7 +18,7 @@ builds:
       - arm
       - arm64
     ldflags:
-      - -s -w -X github.com/cszatmary/shed/cmd.version={{.Version}}
+      - -s -w -X github.com/getshiphub/shed/cmd.version={{.Version}}
 
 archives:
   - replacements:
@@ -48,7 +48,7 @@ changelog:
 # TODO(@cszatmary): Figure out releases
 # brews:
 #   - github:
-#       owner: cszatmary
+#       owner: getshiphub
 #       name: homebrew-tap
 #     commit_author:
 #       name: cszatmary
@@ -65,6 +65,6 @@ changelog:
 
 # release:
 #   github:
-#     owner: cszatmary
+#     owner: getshiphub
 #     name: shed
 #   name_template: "{{.ProjectName}}-v{{.Version}}"

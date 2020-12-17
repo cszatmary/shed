@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"github.com/cszatmary/shed/internal/spinner"
+	"github.com/getshiphub/shed/internal/spinner"
 	"github.com/spf13/cobra"
 )
 

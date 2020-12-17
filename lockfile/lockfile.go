@@ -9,7 +9,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/cszatmary/shed/tool"
+	"github.com/getshiphub/shed/tool"
 )
 
 // ErrNotFound is returned when a tool is not found in a lockfile.

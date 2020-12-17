@@ -7,10 +7,10 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/cszatmary/shed/cache"
-	"github.com/cszatmary/shed/internal/util"
-	"github.com/cszatmary/shed/lockfile"
-	"github.com/cszatmary/shed/tool"
+	"github.com/getshiphub/shed/cache"
+	"github.com/getshiphub/shed/internal/util"
+	"github.com/getshiphub/shed/lockfile"
+	"github.com/getshiphub/shed/tool"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )

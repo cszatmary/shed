@@ -1,8 +1,8 @@
 package cmd
 
 import (
-	"github.com/cszatmary/shed/client"
-	"github.com/cszatmary/shed/internal/util"
+	"github.com/getshiphub/shed/client"
+	"github.com/getshiphub/shed/internal/util"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )

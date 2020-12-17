@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/cszatmary/shed/internal/util"
-	"github.com/cszatmary/shed/tool"
+	"github.com/getshiphub/shed/internal/util"
+	"github.com/getshiphub/shed/tool"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/mod/modfile"

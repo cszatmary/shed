@@ -1,6 +1,6 @@
 package main
 
-import "github.com/cszatmary/shed/cmd"
+import "github.com/getshiphub/shed/cmd"
 
 func main() {
 	cmd.Execute()

@@ -10,7 +10,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/cszatmary/shed/internal/util"
+	"github.com/getshiphub/shed/internal/util"
 )
 
 func TestFileOrDirExists(t *testing.T) {
@@ -87,7 +87,7 @@ func TestExitErrStackf(t *testing.T) {
 
 	expected := "3 failures\n" +
 		"Error: err everything broke\n" +
-		"github.com/cszatmary/shed/internal/util_test.TestExitErrStack\n" +
+		"github.com/getshiphub/shed/internal/util_test.TestExitErrStack\n" +
 		"\t.+"
 	testFormatRegexp(t, 0, err, buf.String(), expected)
 }
