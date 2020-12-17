@@ -1,7 +1,7 @@
 version: 2.1
 
-gomod_cache_key: &gomod_cache_key shed-deps-20201217-{{ checksum "go.sum" }}
-shed_cache_key: &shed_cache_key shed-tools-20201217-{{ checksum "shed.lock" }}
+gomod_cache_key: &gomod_cache_key shed-deps-20201218-{{ checksum "go.sum" }}
+shed_cache_key: &shed_cache_key shed-tools-20201218-{{ checksum "shed.lock" }}
 
 jobs:
   lint-build-test:
@@ -23,6 +23,7 @@ jobs:
           paths:
             - ~/go/pkg
       - save_cache:
+          name: Cache tool dependencies
           key: *shed_cache_key
           paths:
             - ~/.cache/shed

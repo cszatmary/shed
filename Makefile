@@ -4,8 +4,10 @@ COVERPKGS = ./cache,./client,./internal/spinner,./internal/util,./lockfile,./too
 
 # Get all dependencies
 setup:
+	@echo Installing dependencies
 	@go mod download
 # Self-hoisted!
+	@echo Installing tool dependencies
 	@$(SHED) install
 	@$(SHED) run go-fish install
 .PHONY: setup
@@ -15,7 +17,7 @@ build:
 .PHONY: build
 
 build-snapshot:
-	@$(SHED) run goreleaser build --snapshot --rm-dist
+	@$(SHED) run goreleaser build -- --snapshot --rm-dist
 .PHONY: build-snapshot
 
 # Generate shell completions for distribution
