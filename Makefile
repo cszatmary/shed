@@ -15,7 +15,7 @@ build:
 .PHONY: build
 
 build-snapshot:
-	@$(SHED) run goreleaser build --snapshot --rm-dist
+	@$(SHED) run goreleaser build -- --snapshot --rm-dist
 .PHONY: build-snapshot
 
 # Generate shell completions for distribution
