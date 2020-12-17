@@ -7,8 +7,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// TODO(@cszatmary): Set version on build
-var version = "0.0.0-volatile"
+// Set by goreleaser when release build is created.
+var version string
 
 type rootOptions struct {
 	verbose bool

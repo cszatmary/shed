@@ -1,34 +1,46 @@
 .DEFAULT_GOAL = build
-SHED = ./shed
+SHED = go run main.go
 COVERPKGS = ./cache,./client,./internal/spinner,./internal/util,./lockfile,./tool
 
 # Get all dependencies
 setup:
 	@go mod download
-# shed must be built first, so we can use it for tools
-	@go build -o $(SHED)
 # Self-hoisted!
 	@$(SHED) install
 	@$(SHED) run go-fish install
 .PHONY: setup
 
-# Build shed
 build:
 	@go build
-# Generate shell completions for distribution
-	@mkdir -p dist
-	@$(SHED) completions bash > dist/shed.bash
-	@$(SHED) completions zsh > dist/_shed
 .PHONY: build
+
+build-snapshot:
+	@$(SHED) run goreleaser build --snapshot --rm-dist
+.PHONY: build-snapshot
+
+# Generate shell completions for distribution
+completions:
+	@mkdir -p completions
+	@$(SHED) completions bash > completions/shed.bash
+	@$(SHED) completions zsh > completions/_shed
+.PHONY: completions
 
 # Clean all build artifacts
 clean:
-	@rm -rf dist
+	@rm -rf completions
 	@rm -rf coverage
+	@rm -rf dist
 	@rm -f shed
 .PHONY: clean
 
-# Run the linter
+fmt:
+	@gofmt -w .
+.PHONY: fmt
+
+check-fmt:
+	@./scripts/check_fmt.sh
+.PHONY: check-fmt
+
 lint:
 	@$(SHED) run golangci-lint run ./...
 .PHONY: lint

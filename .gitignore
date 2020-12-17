@@ -27,5 +27,6 @@ vendor/
 coverage/
 
 bin/
+completions/
 dist/
 shed
