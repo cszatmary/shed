@@ -138,10 +138,12 @@ func (s *Shed) Install(allowUpdates bool, toolNames ...string) error {
 		}
 
 		existing, err := s.lf.GetTool(toolName)
-		if errors.Is(err, lockfile.ErrIncorrectVersion) && !allowUpdates {
-			err := errors.Errorf("trying to install %s, but %s is in the lockfile", t, existing.Version)
-			errs = append(errs, err)
-			continue
+		if errors.Is(err, lockfile.ErrIncorrectVersion) {
+			if !allowUpdates {
+				err := errors.Errorf("trying to install %s, but %s is in the lockfile", t, existing.Version)
+				errs = append(errs, err)
+				continue
+			}
 		} else if err != nil && !errors.Is(err, lockfile.ErrNotFound) {
 			// Shouldn't happen, but handle just to be safe
 			errs = append(errs, errors.WithMessagef(err, "failed to check if tool exists in lockfile: %s", t))

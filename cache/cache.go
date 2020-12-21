@@ -130,19 +130,19 @@ func (c *Cache) download(t tool.Tool) (tool.Tool, error) {
 				return t, errors.Wrapf(err, "failed to read file %q", modfilePath)
 			}
 
-			gomod, err := modfile.Parse(modfilePath, data, nil)
+			modFile, err := modfile.Parse(modfilePath, data, nil)
 			if err != nil {
 				return t, errors.Wrapf(err, "failed to parse go.mod file %q", modfilePath)
 			}
 
 			modfileOK := true
 			// There should only be a single require, otherwise something is wrong
-			if len(gomod.Require) != 1 {
+			if len(modFile.Require) != 1 {
 				modfileOK = false
-				c.logger.Debugf("expected 1 required statement in go.mod, found %d", len(gomod.Require))
+				c.logger.Debugf("expected 1 required statement in go.mod, found %d", len(modFile.Require))
 			}
 
-			mod := gomod.Require[0].Mod
+			mod := modFile.Require[0].Mod
 			// Use contains since actual module could have less then what we are installing
 			// Ex: golang.org/x/tools vs golang.org/x/tools/cmd/stringer
 			if !strings.Contains(t.ImportPath, mod.Path) {
@@ -187,7 +187,6 @@ func (c *Cache) download(t tool.Tool) (tool.Tool, error) {
 
 		// Create empty go.mod file so we can install module
 		// Can just use _ as the module name since this is a "fake" module
-		// err = execGo(modDir, "mod", "init", "_")
 		err = createGoModFile("_", modDir)
 		if err != nil {
 			return t, err
@@ -228,7 +227,6 @@ func (c *Cache) download(t tool.Tool) (tool.Tool, error) {
 
 	// Create empty go.mod file so we can download the tool
 	// Can just use _ as the module name since this is a "fake" module
-	// err = execGo(modDir, "mod", "init", "_")
 	err = createGoModFile("_", modDir)
 	if err != nil {
 		return t, err
@@ -247,16 +245,16 @@ func (c *Cache) download(t tool.Tool) (tool.Tool, error) {
 		return t, errors.Wrapf(err, "failed to read file %q", modfilePath)
 	}
 
-	gomod, err := modfile.Parse(modfilePath, data, nil)
+	modFile, err := modfile.Parse(modfilePath, data, nil)
 	if err != nil {
 		return t, errors.Wrapf(err, "failed to parse go.mod file %q", modfilePath)
 	}
 
 	// There should only be a single require, otherwise we have a bug
-	if len(gomod.Require) != 1 {
-		return t, errors.Errorf("expected 1 required statement in go.mod, found %d", len(gomod.Require))
+	if len(modFile.Require) != 1 {
+		return t, errors.Errorf("expected 1 required statement in go.mod, found %d", len(modFile.Require))
 	}
-	t.Version = gomod.Require[0].Mod.Version
+	t.Version = modFile.Require[0].Mod.Version
 
 	// We got the version, now we need to rename the dir so it includes the version
 	vfp, err := t.Filepath()
