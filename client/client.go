@@ -136,6 +136,7 @@ func (s *Shed) Install(allowUpdates bool, toolNames ...string) error {
 		t, err := tool.ParseLax(toolName)
 		if err != nil {
 			errs = append(errs, errors.WithMessagef(err, "invalid tool name %s", toolName))
+			continue
 		}
 
 		existing, err := s.lf.GetTool(toolName)
