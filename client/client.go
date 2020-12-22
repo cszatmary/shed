@@ -25,16 +25,25 @@ type Shed struct {
 
 // Options allows for custom configuration of a new Shed instance.
 type Options struct {
-	// The path to the lockfile. If omitted, it will default to './shed.lock'.
+	// LockfilePath is the path to the lockfile.
+	// If omitted, it will default to './shed.lock'.
 	LockfilePath string
-	// A logger to write any debug information to. If omitted, logging will be disabled.
+	// A logger to write any debug information to.
+	// If omitted, logging will be disabled.
 	Logger logrus.FieldLogger
-	// The directory where tools should be installed and cached.
+	// CacheDir is the directory where tools should be installed and cached.
 	// If omitted it will default to 'os.UserCacheDir/shed'.
 	CacheDir string
+	// Go is a cache.Go instance that will be used for downloading and building tools.
+	// If omitted, one will be created.
+	//
+	// This generally should only be explicitly provided when you wish to mock it out
+	// for testing purposes. Otherwise, leaving it empty and using the default is best.
+	Go cache.Go
 }
 
-// NewShed creates a new Shed instance.
+// NewShed creates a new Shed instance. opts can be used to customize the created Shed instance.
+// To use the default options, simply pass an empty Options struct with no fields set.
 func NewShed(opts Options) (*Shed, error) {
 	if opts.LockfilePath == "" {
 		opts.LockfilePath = "shed.lock"
@@ -55,7 +64,7 @@ func NewShed(opts Options) (*Shed, error) {
 		opts.CacheDir = filepath.Join(userCacheDir, "shed")
 	}
 
-	lf := &lockfile.Lockfile{}
+	var lf *lockfile.Lockfile
 	if util.FileOrDirExists(opts.LockfilePath) {
 		f, err := os.Open(opts.LockfilePath)
 		if err != nil {
@@ -67,10 +76,16 @@ func NewShed(opts Options) (*Shed, error) {
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to parse lockfile %s", opts.LockfilePath)
 		}
+	} else {
+		lf = &lockfile.Lockfile{}
+	}
+
+	if opts.Go == nil {
+		opts.Go = cache.NewGo()
 	}
 
 	return &Shed{
-		cache:        cache.New(opts.CacheDir, opts.Logger),
+		cache:        cache.New(opts.CacheDir, opts.Go, opts.Logger),
 		lf:           lf,
 		lockfilePath: opts.LockfilePath,
 		logger:       opts.Logger,
@@ -123,10 +138,12 @@ func (s *Shed) Install(allowUpdates bool, toolNames ...string) error {
 		}
 
 		existing, err := s.lf.GetTool(toolName)
-		if errors.Is(err, lockfile.ErrIncorrectVersion) && !allowUpdates {
-			err := errors.Errorf("trying to install %s, but %s is in the lockfile", t, existing.Version)
-			errs = append(errs, err)
-			continue
+		if errors.Is(err, lockfile.ErrIncorrectVersion) {
+			if !allowUpdates {
+				err := errors.Errorf("trying to install %s, but %s is in the lockfile", t, existing.Version)
+				errs = append(errs, err)
+				continue
+			}
 		} else if err != nil && !errors.Is(err, lockfile.ErrNotFound) {
 			// Shouldn't happen, but handle just to be safe
 			errs = append(errs, errors.WithMessagef(err, "failed to check if tool exists in lockfile: %s", t))

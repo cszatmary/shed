@@ -5,10 +5,8 @@
 package cache
 
 import (
-	"bytes"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -22,13 +20,15 @@ import (
 // Cache manages tools in an OS filesystem directory.
 type Cache struct {
 	rootDir string
-	// For diagnostics
+	// Used to download and build tools.
+	goClient Go
+	// For diagnostics.
 	logger logrus.FieldLogger
 }
 
 // New creates a new Cache instance that uses the given directory.
-func New(dir string, logger logrus.FieldLogger) *Cache {
-	return &Cache{rootDir: dir, logger: logger}
+func New(dir string, goClient Go, logger logrus.FieldLogger) *Cache {
+	return &Cache{rootDir: dir, goClient: goClient, logger: logger}
 }
 
 // Dir returns the OS filesystem directory used by this Cache.
@@ -90,8 +90,7 @@ func (c *Cache) Install(t tool.Tool) (tool.Tool, error) {
 		return downloadedTool, nil
 	}
 
-	// Build using go build
-	err = execGo(binDir, "build", "-o", binPath, downloadedTool.ImportPath)
+	err = c.goClient.Build(downloadedTool.ImportPath, binPath, binDir)
 	if err != nil {
 		return downloadedTool, errors.WithMessagef(err, "failed to build tool: %s", downloadedTool)
 	}
@@ -131,19 +130,19 @@ func (c *Cache) download(t tool.Tool) (tool.Tool, error) {
 				return t, errors.Wrapf(err, "failed to read file %q", modfilePath)
 			}
 
-			gomod, err := modfile.Parse(modfilePath, data, nil)
+			modFile, err := modfile.Parse(modfilePath, data, nil)
 			if err != nil {
 				return t, errors.Wrapf(err, "failed to parse go.mod file %q", modfilePath)
 			}
 
 			modfileOK := true
 			// There should only be a single require, otherwise something is wrong
-			if len(gomod.Require) != 1 {
+			if len(modFile.Require) != 1 {
 				modfileOK = false
-				c.logger.Debugf("expected 1 required statement in go.mod, found %d", len(gomod.Require))
+				c.logger.Debugf("expected 1 required statement in go.mod, found %d", len(modFile.Require))
 			}
 
-			mod := gomod.Require[0].Mod
+			mod := modFile.Require[0].Mod
 			// Use contains since actual module could have less then what we are installing
 			// Ex: golang.org/x/tools vs golang.org/x/tools/cmd/stringer
 			if !strings.Contains(t.ImportPath, mod.Path) {
@@ -188,18 +187,16 @@ func (c *Cache) download(t tool.Tool) (tool.Tool, error) {
 
 		// Create empty go.mod file so we can install module
 		// Can just use _ as the module name since this is a "fake" module
-		err = execGo(modDir, "mod", "init", "_")
+		err = createGoModFile("_", modDir)
 		if err != nil {
 			return t, err
 		}
 
-		// Download using go get -d to get the source
-		// What's nice here is we leverage the power of go get so we don't need to
-		// reinvent the module resolution & downloading. Also we can reuse an existing
-		// download that's already cached.
-		// Always download even if the modfile existed, just to be safe.
+		// Download the module source. What's nice here is we leverage the power of
+		// go get so we don't need to reinvent the module resolution & downloading.
+		// Also we can reuse an existing download that's already cached.
 
-		err = execGo(modDir, "get", "-d", t.Module())
+		err = c.goClient.GetD(t.Module(), modDir)
 		if err != nil {
 			return t, err
 		}
@@ -230,14 +227,14 @@ func (c *Cache) download(t tool.Tool) (tool.Tool, error) {
 
 	// Create empty go.mod file so we can download the tool
 	// Can just use _ as the module name since this is a "fake" module
-	err = execGo(modDir, "mod", "init", "_")
+	err = createGoModFile("_", modDir)
 	if err != nil {
 		return t, err
 	}
 
-	// Download using got get -d to get the source
-	// go get will do the heavy lifting to figure out the latest version
-	err = execGo(modDir, "get", "-d", t.Module())
+	// Download the module source. This will do the heavy lifting to figure out
+	// the latest version.
+	err = c.goClient.GetD(t.Module(), modDir)
 	if err != nil {
 		return t, err
 	}
@@ -248,16 +245,16 @@ func (c *Cache) download(t tool.Tool) (tool.Tool, error) {
 		return t, errors.Wrapf(err, "failed to read file %q", modfilePath)
 	}
 
-	gomod, err := modfile.Parse(modfilePath, data, nil)
+	modFile, err := modfile.Parse(modfilePath, data, nil)
 	if err != nil {
 		return t, errors.Wrapf(err, "failed to parse go.mod file %q", modfilePath)
 	}
 
 	// There should only be a single require, otherwise we have a bug
-	if len(gomod.Require) != 1 {
-		return t, errors.Errorf("expected 1 required statement in go.mod, found %d", len(gomod.Require))
+	if len(modFile.Require) != 1 {
+		return t, errors.Errorf("expected 1 required statement in go.mod, found %d", len(modFile.Require))
 	}
-	t.Version = gomod.Require[0].Mod.Version
+	t.Version = modFile.Require[0].Mod.Version
 
 	// We got the version, now we need to rename the dir so it includes the version
 	vfp, err := t.Filepath()
@@ -299,20 +296,4 @@ func (c *Cache) ToolPath(t tool.Tool) (string, error) {
 		return "", errors.Errorf("binary for tool %s does not exist", t)
 	}
 	return binPath, nil
-}
-
-func execGo(dir string, args ...string) error {
-	cmd := exec.Command("go", args...)
-	cmd.Dir = dir
-
-	stderr := &bytes.Buffer{}
-	cmd.Stderr = stderr
-
-	err := cmd.Run()
-	if err != nil {
-		argsStr := strings.Join(args, " ")
-		return errors.Wrapf(err, "failed to run 'go %s', stderr: %s", argsStr, stderr.String())
-	}
-
-	return nil
 }

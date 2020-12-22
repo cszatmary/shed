@@ -13,6 +13,9 @@ jobs:
           name: Restore dependency cache
           keys:
             - *gomod_cache_key
+      - restore_cache:
+          name: Restore tool dependency cache
+          keys:
             - *shed_cache_key
       - run:
           name: Install dependencies

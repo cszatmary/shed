@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -22,7 +21,7 @@ var cacheCleanCmd = &cobra.Command{
 	Long: `Cleans the shed cache by removing all installed tools.
 This is useful for removing any stale tools that are no longer needed.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if err := os.RemoveAll(shed.CacheDir()); err != nil {
+		if err := shed.CleanCache(); err != nil {
 			fatal.ExitErrf(err, "Failed to clean cache directory")
 		}
 	},
