@@ -89,6 +89,44 @@ func TestTool(t *testing.T) {
 	}
 }
 
+func TestToolHasSemver(t *testing.T) {
+	tests := []struct {
+		name string
+		tool tool.Tool
+		want bool
+	}{
+		{
+			name: "valid semver",
+			tool: tool.Tool{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"},
+			want: true,
+		},
+		{
+			name: "no version",
+			tool: tool.Tool{ImportPath: "github.com/cszatmary/go-fish"},
+			want: false,
+		},
+		{
+			name: "branch name",
+			tool: tool.Tool{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "master"},
+			want: false,
+		},
+		{
+			name: "pseudo-version",
+			tool: tool.Tool{ImportPath: "golang.org/x/tools/cmd/stringer", Version: "v0.0.0-20201211185031-d93e913c1a58"},
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.tool.HasSemver()
+			if got != tt.want {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestToolFilepathError(t *testing.T) {
 	tests := []struct {
 		name string
@@ -187,11 +225,104 @@ func TestParseError(t *testing.T) {
 			name:   "invalid version",
 			module: "golang.org/x/tools/cmd/stringer@v0..0-20201211185031-d93e913c1a58",
 		},
+		{
+			name:   "dangling @",
+			module: "github.com/Shopify/ejson/cmd/ejson@",
+		},
+		{
+			name:   "branch name",
+			module: "github.com/golangci/golangci-lint/cmd/golangci-lint@master",
+		},
+		{
+			name:   "git SHA",
+			module: "github.com/cszatmary/go-fish@22d10c9b658df297b17b33c836a60fb943ef5a5f",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := tool.Parse(tt.module)
+			if err == nil {
+				t.Error("want non-nil error, got nil")
+			}
+		})
+	}
+}
+
+func TestParseLax(t *testing.T) {
+	tests := []struct {
+		name   string
+		module string
+		want   tool.Tool
+	}{
+		{
+			name:   "root module",
+			module: "github.com/cszatmary/go-fish@v0.1.0",
+			want:   tool.Tool{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"},
+		},
+		{
+			name:   "no version",
+			module: "github.com/cszatmary/go-fish",
+			want:   tool.Tool{ImportPath: "github.com/cszatmary/go-fish"},
+		},
+		{
+			name:   "nested import path",
+			module: "github.com/golangci/golangci-lint/cmd/golangci-lint@v1.33.0",
+			want:   tool.Tool{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.33.0"},
+		},
+		{
+			name:   "pseudo-version",
+			module: "golang.org/x/tools/cmd/stringer@v0.0.0-20201211185031-d93e913c1a58",
+			want:   tool.Tool{ImportPath: "golang.org/x/tools/cmd/stringer", Version: "v0.0.0-20201211185031-d93e913c1a58"},
+		},
+		{
+			name:   "escaped path",
+			module: "github.com/Shopify/ejson/cmd/ejson@v1.2.2",
+			want:   tool.Tool{ImportPath: "github.com/Shopify/ejson/cmd/ejson", Version: "v1.2.2"},
+		},
+		{
+			name:   "branch name",
+			module: "github.com/golangci/golangci-lint/cmd/golangci-lint@master",
+			want:   tool.Tool{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "master"},
+		},
+		{
+			name:   "git SHA",
+			module: "github.com/cszatmary/go-fish@22d10c9b658df297b17b33c836a60fb943ef5a5f",
+			want:   tool.Tool{ImportPath: "github.com/cszatmary/go-fish", Version: "22d10c9b658df297b17b33c836a60fb943ef5a5f"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tl, err := tool.ParseLax(tt.module)
+			if err != nil {
+				t.Errorf("want nil error, got %v", err)
+			}
+			if tl != tt.want {
+				t.Errorf("got %+v, want %+v", tl, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseLaxError(t *testing.T) {
+	tests := []struct {
+		name   string
+		module string
+	}{
+		{
+			name:   "invalid domain",
+			module: "golang/x/tools/cmd/stringer@v0.0.0-20201211185031-d93e913c1a58",
+		},
+		{
+			name:   "dangling @",
+			module: "github.com/Shopify/ejson/cmd/ejson@",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := tool.ParseLax(tt.module)
 			if err == nil {
 				t.Error("want non-nil error, got nil")
 			}
