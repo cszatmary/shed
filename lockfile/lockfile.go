@@ -24,7 +24,7 @@ var ErrIncorrectVersion = errors.New("lockfile: incorrect version of tool")
 var ErrMultipleTools = errors.New("lockfile: multiple tools found with the same name")
 
 // Lockfile represents a shed lockfile. The lockfile is responsible for keeping
-// track of installed tools as well as their versions should shed can always
+// track of installed tools as well as their versions so shed can always
 // re-install the same version of each tool.
 //
 // An a zero value Lockfile is a valid empty lockfile ready for use.
@@ -66,7 +66,7 @@ func (lf *Lockfile) GetTool(name string) (tool.Tool, error) {
 	}
 
 	// Long way, parse the tool name which should be an import path
-	tl, err := tool.Parse(name)
+	tl, err := tool.ParseLax(name)
 	if err != nil {
 		return tool.Tool{}, err
 	}
@@ -92,7 +92,7 @@ func (lf *Lockfile) GetTool(name string) (tool.Tool, error) {
 	return tool.Tool{}, fmt.Errorf("%w: %s", ErrNotFound, toolName)
 }
 
-// PutTool add or replaces the given tool in the lockfile.
+// PutTool adds or replaces the given tool in the lockfile.
 func (lf *Lockfile) PutTool(t tool.Tool) {
 	if lf.tools == nil {
 		lf.tools = make(map[string][]tool.Tool)

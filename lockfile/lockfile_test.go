@@ -81,6 +81,13 @@ func TestLockfileGet(t *testing.T) {
 			wantTool: tool.Tool{ImportPath: "golang.org/x/tools/cmd/stringer", Version: "v0.0.0-20201211185031-d93e913c1a58"},
 			wantErr:  lockfile.ErrIncorrectVersion,
 		},
+		{
+			// Make sure it is not found instead of invalid version
+			name:     "not found query",
+			toolName: "golang.org/x/tools/cmd/stress@master",
+			wantTool: tool.Tool{},
+			wantErr:  lockfile.ErrNotFound,
+		},
 	}
 
 	for _, tt := range tests {

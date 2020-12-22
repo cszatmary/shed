@@ -122,7 +122,7 @@ func (c *Cache) download(t tool.Tool) (tool.Tool, error) {
 	modfilePath := filepath.Join(modDir, "go.mod")
 
 	// If we have the version the process is pretty easy
-	if t.Version != "" {
+	if t.HasSemver() {
 		if util.FileOrDirExists(modfilePath) {
 			// If go.mod already exists, make sure there's no issues with it
 			data, err := ioutil.ReadFile(modfilePath)
@@ -177,11 +177,7 @@ func (c *Cache) download(t tool.Tool) (tool.Tool, error) {
 			}
 		}
 
-		// It's easier to just mkdir -p right now instead of
-		// check if the dir exists beforehand
-		// We can improve this later if needed
-		err = os.MkdirAll(modDir, 0o755)
-		if err != nil {
+		if err := os.MkdirAll(modDir, 0o755); err != nil {
 			return t, errors.Wrapf(err, "failed to create directory %q", modDir)
 		}
 
@@ -209,9 +205,8 @@ func (c *Cache) download(t tool.Tool) (tool.Tool, error) {
 	}
 
 	// Don't have the version, this process is a bit more complicated because
-	// we need to figure out what the latest version is
+	// we need to resolve the correct version.
 
-	// Use import path without version and download latest version
 	if err := os.MkdirAll(modDir, 0o755); err != nil {
 		return t, errors.Wrapf(err, "failed to create directory %q", modDir)
 	}
@@ -233,7 +228,7 @@ func (c *Cache) download(t tool.Tool) (tool.Tool, error) {
 	}
 
 	// Download the module source. This will do the heavy lifting to figure out
-	// the latest version.
+	// the correct version.
 	err = c.goClient.GetD(t.Module(), modDir)
 	if err != nil {
 		return t, err

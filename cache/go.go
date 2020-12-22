@@ -105,30 +105,31 @@ type mockModule struct {
 	name string
 	// List of semver versions, must be sorted from earliest to latest version
 	versions []string
+	// Queries to versions
+	queries map[string]string
 }
 
 // NewMockGo returns a new Go instance that is suitable for testing.
-// Tools is a list of tools which contains the import path and version.
-func NewMockGo(tools []string) (Go, error) {
+// Tools is a map of import paths to a map of queries to versions.
+func NewMockGo(tools map[string]map[string]string) (Go, error) {
 	registry := make(map[string]mockModule)
-	for _, tn := range tools {
-		t, err := tool.Parse(tn)
+	for tn, queries := range tools {
+		t, err := tool.ParseLax(tn)
 		if err != nil {
 			return nil, err
-		}
-
-		// Module already exists, add new version
-		m, ok := registry[t.ImportPath]
-		if ok {
-			m.versions = append(m.versions, t.Version)
-			registry[t.ImportPath] = m
-			continue
 		}
 
 		// Take first 3 parts as the module name
 		// This should be could enough for testing purposes
 		modName := strings.Join(strings.Split(t.ImportPath, "/")[:3], "/")
-		m = mockModule{name: modName, versions: []string{t.Version}}
+		m := mockModule{name: modName, queries: queries}
+		var versions []string
+		for q := range queries {
+			if semver.IsValid(q) && q == semver.Canonical(q) {
+				versions = append(versions, q)
+			}
+		}
+		m.versions = versions
 		registry[t.ImportPath] = m
 	}
 
@@ -157,7 +158,7 @@ func (mg *mockGo) Build(pkg, outPath, dir string) error {
 }
 
 func (mg *mockGo) GetD(mod, dir string) error {
-	t, err := tool.Parse(mod)
+	t, err := tool.ParseLax(mod)
 	if err != nil {
 		return err
 	}
@@ -168,22 +169,33 @@ func (mg *mockGo) GetD(mod, dir string) error {
 	}
 
 	modver := module.Version{Path: m.name}
-	if t.Version != "" {
+	if t.Version == "" || t.Version == "latest" {
+		modver.Version = m.versions[len(m.versions)-1]
+	} else {
 		// If version is provided, see if it exists
 		found := false
-		for _, v := range m.versions {
-			if v == t.Version {
-				modver.Version = v
-				found = true
-				break
+		// TODO(@cszatmary): Make this work with shorthand semvers
+		if t.HasSemver() {
+			for _, v := range m.versions {
+				if v == t.Version {
+					modver.Version = v
+					found = true
+					break
+				}
+			}
+		} else {
+			// If no semver, see if a matching query exists
+			for q, v := range m.queries {
+				if q == t.Version {
+					modver.Version = v
+					found = true
+					break
+				}
 			}
 		}
 		if !found {
 			return errors.Errorf("module %s has no version %s", t.ImportPath, t.Version)
 		}
-	} else {
-		// Find latest version
-		modver.Version = m.versions[len(m.versions)-1]
 	}
 
 	modfilePath := filepath.Join(dir, "go.mod")
