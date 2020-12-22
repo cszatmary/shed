@@ -38,14 +38,25 @@ func TestClientCache(t *testing.T) {
 	}
 }
 
-var availableTools = []string{
-	"github.com/cszatmary/go-fish@v0.1.0",
-	"github.com/golangci/golangci-lint/cmd/golangci-lint@v1.33.0",
-	"github.com/golangci/golangci-lint/cmd/golangci-lint@v1.28.3",
-	"golang.org/x/tools/cmd/stringer@v0.0.0-20201211185031-d93e913c1a58",
-	"github.com/Shopify/ejson/cmd/ejson@v1.2.2",
-	"github.com/Shopify/ejson/cmd/ejson@v1.1.0",
-	"example.org/z/random/stringer/v2/cmd/stringer@v2.1.0",
+var availableTools = map[string]map[string]string{
+	"github.com/cszatmary/go-fish": {
+		"v0.1.0": "v0.1.0",
+		"22d10c9b658df297b17b33c836a60fb943ef5a5f": "v0.0.0-20201203230243-22d10c9b658d",
+	},
+	"github.com/golangci/golangci-lint/cmd/golangci-lint": {
+		"v1.33.0": "v1.33.0",
+		"v1.28.3": "v1.28.3",
+	},
+	"golang.org/x/tools/cmd/stringer": {
+		"v0.0.0-20201211185031-d93e913c1a58": "v0.0.0-20201211185031-d93e913c1a58",
+	},
+	"github.com/Shopify/ejson/cmd/ejson": {
+		"v1.2.2": "v1.2.2",
+		"v1.1.0": "v1.1.0",
+	},
+	"example.org/z/random/stringer/v2/cmd/stringer": {
+		"v2.1.0": "v2.1.0",
+	},
 }
 
 func createLockfile(t *testing.T, path string, tools []tool.Tool) {
@@ -106,13 +117,13 @@ func TestInstall(t *testing.T) {
 			name:          "install specific versions",
 			lockfileTools: nil,
 			installTools: []string{
-				"github.com/cszatmary/go-fish@v0.1.0",
+				"github.com/cszatmary/go-fish@22d10c9b658df297b17b33c836a60fb943ef5a5f",
 				"github.com/golangci/golangci-lint/cmd/golangci-lint@v1.28.3",
 				"github.com/Shopify/ejson/cmd/ejson@v1.1.0",
 			},
 			allowUpdates: false,
 			wantTools: []tool.Tool{
-				{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"},
+				{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.0.0-20201203230243-22d10c9b658d"},
 				{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.28.3"},
 				{ImportPath: "github.com/Shopify/ejson/cmd/ejson", Version: "v1.1.0"},
 			},

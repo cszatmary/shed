@@ -132,7 +132,8 @@ func (s *Shed) Install(allowUpdates bool, toolNames ...string) error {
 	var errs lockfile.ErrorList
 	for _, toolName := range toolNames {
 		// This also serves to validate the the given tool name is a valid module name
-		t, err := tool.Parse(toolName)
+		// Use ParseLax since the version might be a query that should be passed to go get.
+		t, err := tool.ParseLax(toolName)
 		if err != nil {
 			errs = append(errs, errors.WithMessagef(err, "invalid tool name %s", toolName))
 		}
