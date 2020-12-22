@@ -5,13 +5,27 @@ It is built on top of Go Modules, and allows for reproducible dev environments.
 
 ## Installation
 
-Currently the way to get shed is using `go get`:
+#### Binary Release
+
+```
+curl -sSfL https://raw.githubusercontent.com/getshiphub/shed/master/scripts/install.sh | sh -s -- -b /usr/local/bin
+```
+
+This will install it to `/usr/local/bin/shed`. You can specify a different path to `-b` to customize the install location.
+
+You can also install a specific version by providing the git tag as an argument.
+
+```
+curl -sSfL https://raw.githubusercontent.com/getshiphub/shed/master/scripts/install.sh | sh -s -- -b /usr/local/bin v0.1.0
+```
+
+#### Install from source
+
+You can also install shed using `go get`:
 
 ```
 go get github.com/getshiphub/shed
 ```
-
-Binary releases coming soon.
 
 ## Usage
 

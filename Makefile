@@ -65,3 +65,7 @@ test-ci:
 	@go test -coverpkg=$(COVERPKGS) -coverprofile=coverage/coverage.txt ./...
 	@go tool cover -func=coverage/coverage.txt
 .PHONY: test-ci
+
+# Generate install script to download binaries
+scripts/install.sh: .goreleaser.yml
+	@$(SHED) run godownloader .goreleaser.yml > $@

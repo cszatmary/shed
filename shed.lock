@@ -6,6 +6,9 @@
     "github.com/golangci/golangci-lint/cmd/golangci-lint": {
       "version": "v1.33.0"
     },
+    "github.com/goreleaser/godownloader": {
+      "version": "v0.1.1-0.20200813202458-888d721de8bd"
+    },
     "github.com/goreleaser/goreleaser": {
       "version": "v0.149.0"
     }

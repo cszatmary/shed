@@ -32,12 +32,6 @@ archives:
       - LICENSE
       - completions/*
 
-checksum:
-  name_template: 'checksums.txt'
-
-snapshot:
-  name_template: "{{ .Tag }}-next"
-
 changelog:
   sort: asc
   filters:
@@ -45,7 +39,12 @@ changelog:
     - '^docs:'
     - '^test:'
 
-# TODO(@cszatmary): Figure out releases
+release:
+  github:
+    owner: getshiphub
+    name: shed
+
+# TODO(@cszatmary): Figure out homebrew release
 # brews:
 #   - github:
 #       owner: getshiphub
@@ -55,16 +54,9 @@ changelog:
 #       email: cs@christopherszatmary.com
 #     folder: Formula
 #     description: "Easily manage Go tool dependencies"
-
 #     test: |
 #       system "#{bin}/shed --version"
 #     install: |
 #       bin.install "shed"
 #       bash_completion.install "dist/completions/shed.bash"
 #       zsh_completion.install "dist/completions/_shed"
-
-# release:
-#   github:
-#     owner: getshiphub
-#     name: shed
-#   name_template: "{{.ProjectName}}-v{{.Version}}"
