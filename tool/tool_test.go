@@ -115,6 +115,16 @@ func TestToolHasSemver(t *testing.T) {
 			tool: tool.Tool{ImportPath: "golang.org/x/tools/cmd/stringer", Version: "v0.0.0-20201211185031-d93e913c1a58"},
 			want: true,
 		},
+		{
+			name: "shorthand major",
+			tool: tool.Tool{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1"},
+			want: false,
+		},
+		{
+			name: "shorthand major minor",
+			tool: tool.Tool{ImportPath: "github.com/Shopify/ejson/cmd/ejson", Version: "v1.2"},
+			want: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -178,11 +188,6 @@ func TestParse(t *testing.T) {
 			want:   tool.Tool{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"},
 		},
 		{
-			name:   "no version",
-			module: "github.com/cszatmary/go-fish",
-			want:   tool.Tool{ImportPath: "github.com/cszatmary/go-fish"},
-		},
-		{
 			name:   "nested import path",
 			module: "github.com/golangci/golangci-lint/cmd/golangci-lint@v1.33.0",
 			want:   tool.Tool{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.33.0"},
@@ -196,6 +201,16 @@ func TestParse(t *testing.T) {
 			name:   "escaped path",
 			module: "github.com/Shopify/ejson/cmd/ejson@v1.2.2",
 			want:   tool.Tool{ImportPath: "github.com/Shopify/ejson/cmd/ejson", Version: "v1.2.2"},
+		},
+		{
+			name:   "shorthand major",
+			module: "github.com/golangci/golangci-lint/cmd/golangci-lint@v1",
+			want:   tool.Tool{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.0.0"},
+		},
+		{
+			name:   "shorthand major minor",
+			module: "github.com/Shopify/ejson/cmd/ejson@v1.2",
+			want:   tool.Tool{ImportPath: "github.com/Shopify/ejson/cmd/ejson", Version: "v1.2.0"},
 		},
 	}
 
@@ -224,6 +239,10 @@ func TestParseError(t *testing.T) {
 		{
 			name:   "invalid version",
 			module: "golang.org/x/tools/cmd/stringer@v0..0-20201211185031-d93e913c1a58",
+		},
+		{
+			name:   "no version",
+			module: "github.com/cszatmary/go-fish",
 		},
 		{
 			name:   "dangling @",
@@ -289,6 +308,16 @@ func TestParseLax(t *testing.T) {
 			name:   "git SHA",
 			module: "github.com/cszatmary/go-fish@22d10c9b658df297b17b33c836a60fb943ef5a5f",
 			want:   tool.Tool{ImportPath: "github.com/cszatmary/go-fish", Version: "22d10c9b658df297b17b33c836a60fb943ef5a5f"},
+		},
+		{
+			name:   "shorthand major",
+			module: "github.com/golangci/golangci-lint/cmd/golangci-lint@v1",
+			want:   tool.Tool{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1"},
+		},
+		{
+			name:   "shorthand major minor",
+			module: "github.com/Shopify/ejson/cmd/ejson@v1.2",
+			want:   tool.Tool{ImportPath: "github.com/Shopify/ejson/cmd/ejson", Version: "v1.2"},
 		},
 	}
 

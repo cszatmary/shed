@@ -44,8 +44,11 @@ func (t Tool) Module() string {
 }
 
 // HasSemver reports whether t.Version is a valid semantic version.
+// HasSemver requires t.Version to be a full semantic version. It does
+// not allow shorthands like vMAJOR or vMAJOR.MINOR.
 func (t Tool) HasSemver() bool {
-	return semver.IsValid(t.Version)
+	// Compare against canonical to make sure it isn't a shorthand.
+	return semver.IsValid(t.Version) && t.Version == semver.Canonical(t.Version)
 }
 
 // String returns a string representation of the tool.
@@ -88,11 +91,12 @@ func (t Tool) BinaryFilepath() (string, error) {
 	return filepath.Join(fp, t.Name()), nil
 }
 
-// Parse parses the given tool name. Name must be a valid import path,
-// optionally with a version. If a version is provided, it must be a valid
-// semantic version and it must be prefixed with 'v' (ex: 'v1.2.3').
-// The format with a version must be 'ImportPath@Version', just like
-// what would be passed to a command like 'go get'.
+// Parse parses the given tool name and returns a tool containing the
+// import path and version. name must be a valid import path and a version
+// with the format 'IMPORT_PATH@VERSION'. This format is the same as what would be
+// pass to a command like 'go get'. The version must be a valid semantic version
+// and it must be prefixed with 'v' (ex: 'v1.2.3'). If a shorthand semantic version
+// is used, it will be canonicalized (ex: 'v1' will become 'v1.0.0').
 func Parse(name string) (Tool, error) {
 	return parseTool(name, true)
 }
@@ -101,7 +105,13 @@ func Parse(name string) (Tool, error) {
 // It is used when downloading and resolving tools using 'go get'. This is because
 // go get allows module queries, which is where a version is resolved based on a
 // branch name, commit SHA, version range, etc.
-// See https://golang.org/cmd/go/#hdr-Module_queries for more details.
+// See https://golang.org/cmd/go/#hdr-Module_queries for more details on module queries.
+// Unlike Parse, ParseLax will not canonicalize shorthand semantic verions and will
+// instead leave them as is.
+//
+// ParseLax allows the version to be omitted in which case it is assumed to mean
+// the latest version. That is, 'golang/x/tools/cmd/stringer' is functionally
+// equivalent to 'golang/x/tools/cmd/stringer@latest'.
 func ParseLax(name string) (Tool, error) {
 	return parseTool(name, false)
 }
@@ -124,14 +134,19 @@ func parseTool(name string, strict bool) (Tool, error) {
 	if err := module.CheckPath(t.ImportPath); err != nil {
 		return t, fmt.Errorf("tool: invalid import path %q: %w", t.ImportPath, err)
 	}
-	// TODO(@cszatmary): Consider making it an error if version isn't provided
-	// in strict mode.
-	if !strict || t.Version == "" {
+	// Version validation is ignored if not strict
+	if !strict {
 		return t, nil
 	}
 
 	if !semver.IsValid(t.Version) {
 		return t, fmt.Errorf("tool: invalid version %q: not a semantic version", t.Version)
+	}
+	// The semver package allows vMAJOR and vMAJOR.MINOR as shorthands.
+	// Use the canonical version to ensure it is a full semantic version.
+	canonical := semver.Canonical(t.Version)
+	if t.Version != canonical {
+		t.Version = canonical
 	}
 	return t, nil
 }
