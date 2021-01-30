@@ -26,9 +26,44 @@ type Cache struct {
 	logger logrus.FieldLogger
 }
 
-// New creates a new Cache instance that uses the given directory.
-func New(dir string, goClient Go, logger logrus.FieldLogger) *Cache {
-	return &Cache{rootDir: dir, goClient: goClient, logger: logger}
+// New creates a new Cache instance that uses the directory dir.
+// Options can be provided to customize the Cache instance.
+func New(dir string, opts ...Option) *Cache {
+	c := &Cache{rootDir: dir}
+	for _, opt := range opts {
+		opt(c)
+	}
+	// Set defaults
+	if c.goClient == nil {
+		c.goClient = NewGo()
+	}
+	if c.logger == nil {
+		// Logging is disabled by default, but we don't want to have to check
+		// for nil all the time, so create a logger that logs to nowhere
+		logger := logrus.New()
+		logger.Out = ioutil.Discard
+		c.logger = logger
+	}
+	return c
+}
+
+// Option is a function that takes a Cache instance and applies
+// a configuration to it.
+type Option func(*Cache)
+
+// WithGo sets the Go client that should be used to download and build tools.
+func WithGo(goClient Go) Option {
+	return func(c *Cache) {
+		c.goClient = goClient
+	}
+}
+
+// WithLogger sets a logger that should be used for writing debug messages.
+// By default no logging is done.
+func WithLogger(logger logrus.FieldLogger) Option {
+	return func(c *Cache) {
+		c.logger = logger
+	}
 }
 
 // Dir returns the OS filesystem directory used by this Cache.
@@ -273,7 +308,7 @@ func (c *Cache) download(t tool.Tool) (tool.Tool, error) {
 	c.logger.WithFields(logrus.Fields{
 		"tool": t,
 		"path": modVersionDir,
-	}).Debug("downloaded module")
+	}).Debug("downloaded tool")
 	return t, nil
 }
 

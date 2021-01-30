@@ -15,9 +15,7 @@ import (
 
 func TestClientCache(t *testing.T) {
 	td := t.TempDir()
-	s, err := client.NewShed(client.Options{
-		CacheDir: td,
-	})
+	s, err := client.NewShed(client.WithCache(cache.New(td)))
 	if err != nil {
 		t.Fatalf("failed to create shed client %v", err)
 	}
@@ -176,11 +174,10 @@ func TestInstall(t *testing.T) {
 			if tt.lockfileTools != nil {
 				createLockfile(t, lockfilePath, tt.lockfileTools)
 			}
-			s, err := client.NewShed(client.Options{
-				LockfilePath: lockfilePath,
-				CacheDir:     td,
-				Go:           mockGo,
-			})
+			s, err := client.NewShed(
+				client.WithLockfilePath(lockfilePath),
+				client.WithCache(cache.New(td, cache.WithGo(mockGo))),
+			)
 			if err != nil {
 				t.Fatalf("failed to create shed client %v", err)
 			}
@@ -220,11 +217,10 @@ func TestInstallError(t *testing.T) {
 	createLockfile(t, lockfilePath, []tool.Tool{
 		{ImportPath: "github.com/Shopify/ejson/cmd/ejson", Version: "v1.1.0"},
 	})
-	s, err := client.NewShed(client.Options{
-		LockfilePath: lockfilePath,
-		CacheDir:     td,
-		Go:           mockGo,
-	})
+	s, err := client.NewShed(
+		client.WithLockfilePath(lockfilePath),
+		client.WithCache(cache.New(td, cache.WithGo(mockGo))),
+	)
 	if err != nil {
 		t.Fatalf("failed to create shed client %v", err)
 	}
@@ -253,10 +249,10 @@ func TestUninstall(t *testing.T) {
 		{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.33.0"},
 		{ImportPath: "github.com/Shopify/ejson/cmd/ejson", Version: "v1.2.2"},
 	})
-	s, err := client.NewShed(client.Options{
-		LockfilePath: lockfilePath,
-		CacheDir:     td,
-	})
+	s, err := client.NewShed(
+		client.WithLockfilePath(lockfilePath),
+		client.WithCache(cache.New(td)),
+	)
 	if err != nil {
 		t.Fatalf("failed to create shed client %v", err)
 	}
