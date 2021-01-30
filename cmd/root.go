@@ -35,9 +35,7 @@ var rootCmd = &cobra.Command{
 		})
 
 		var err error
-		shed, err = client.NewShed(client.Options{
-			Logger: logger,
-		})
+		shed, err = client.NewShed(client.WithLogger(logger))
 		if err != nil {
 			fatal.ExitErrf(err, "Failed to setup shed")
 		}

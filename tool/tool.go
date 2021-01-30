@@ -22,7 +22,7 @@ type Tool struct {
 	ImportPath string
 	// The version of the tool. This correspeonds to the version of
 	// the Go module the tool belongs to. If version is empty,
-	// it significes that the latest version is desired where allowed.
+	// it signifies that the latest version is desired where allowed.
 	Version string
 }
 
@@ -34,7 +34,7 @@ func (t Tool) Name() string {
 
 // Module returns the module name suitable for commands like 'go get'.
 // This is the import path plus the version, if it exists, with the
-// format 'ImportPath@Version'. If Version is empty, Module just
+// format 'IMPORT_PATH@VERSION'. If Version is empty, Module just
 // returns ImportPath.
 func (t Tool) Module() string {
 	if t.Version == "" {
@@ -61,7 +61,7 @@ func (t Tool) String() string {
 }
 
 // Filepath returns the relative OS filesystem path represented by this tool.
-// The escape rules required for import paths on are followed.
+// The escape rules required for import paths are followed.
 // For details on escaped paths see:
 // https://pkg.go.dev/golang.org/x/mod@v0.4.0/module#hdr-Escaped_Paths
 func (t Tool) Filepath() (string, error) {
@@ -94,7 +94,7 @@ func (t Tool) BinaryFilepath() (string, error) {
 // Parse parses the given tool name and returns a tool containing the
 // import path and version. name must be a valid import path and a version
 // with the format 'IMPORT_PATH@VERSION'. This format is the same as what would be
-// pass to a command like 'go get'. The version must be a valid semantic version
+// passed to a command like 'go get'. The version must be a valid semantic version
 // and it must be prefixed with 'v' (ex: 'v1.2.3'). If a shorthand semantic version
 // is used, it will be canonicalized (ex: 'v1' will become 'v1.0.0').
 func Parse(name string) (Tool, error) {

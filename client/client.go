@@ -8,7 +8,6 @@ import (
 	"sort"
 
 	"github.com/getshiphub/shed/cache"
-	"github.com/getshiphub/shed/internal/util"
 	"github.com/getshiphub/shed/lockfile"
 	"github.com/getshiphub/shed/tool"
 	"github.com/pkg/errors"
@@ -23,73 +22,75 @@ type Shed struct {
 	logger       logrus.FieldLogger
 }
 
-// Options allows for custom configuration of a new Shed instance.
-type Options struct {
-	// LockfilePath is the path to the lockfile.
-	// If omitted, it will default to './shed.lock'.
-	LockfilePath string
-	// A logger to write any debug information to.
-	// If omitted, logging will be disabled.
-	Logger logrus.FieldLogger
-	// CacheDir is the directory where tools should be installed and cached.
-	// If omitted it will default to 'os.UserCacheDir/shed'.
-	CacheDir string
-	// Go is a cache.Go instance that will be used for downloading and building tools.
-	// If omitted, one will be created.
-	//
-	// This generally should only be explicitly provided when you wish to mock it out
-	// for testing purposes. Otherwise, leaving it empty and using the default is best.
-	Go cache.Go
-}
-
-// NewShed creates a new Shed instance. opts can be used to customize the created Shed instance.
-// To use the default options, simply pass an empty Options struct with no fields set.
-func NewShed(opts Options) (*Shed, error) {
-	if opts.LockfilePath == "" {
-		opts.LockfilePath = "shed.lock"
+// NewShed creates a new Shed instance. Options can be provided to customize the created Shed instance.
+//
+// By default, the lockfile path used is './shed.lock' and the cache directory is 'os.UserCacheDir()/shed'.
+func NewShed(opts ...Option) (*Shed, error) {
+	s := &Shed{}
+	for _, opt := range opts {
+		opt(s)
 	}
 
-	if opts.Logger == nil {
-		// Create a logger that logs to nothing to disable logging
-		l := logrus.New()
-		l.SetOutput(ioutil.Discard)
-		opts.Logger = l
+	// Set defaults
+	if s.lockfilePath == "" {
+		s.lockfilePath = "shed.lock"
 	}
-
-	if opts.CacheDir == "" {
+	if s.logger == nil {
+		// Logging is disabled by default, but we don't want to have to check
+		// for nil all the time, so create a logger that logs to nowhere
+		logger := logrus.New()
+		logger.Out = ioutil.Discard
+		s.logger = logger
+	}
+	if s.cache == nil {
 		userCacheDir, err := os.UserCacheDir()
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to find user cache directory")
+			return nil, errors.Wrap(err, "failed to find user cache directory")
 		}
-		opts.CacheDir = filepath.Join(userCacheDir, "shed")
+		s.cache = cache.New(filepath.Join(userCacheDir, "shed"), cache.WithLogger(s.logger))
 	}
 
-	var lf *lockfile.Lockfile
-	if util.FileOrDirExists(opts.LockfilePath) {
-		f, err := os.Open(opts.LockfilePath)
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to open file %s", opts.LockfilePath)
-		}
-		defer f.Close()
-
-		lf, err = lockfile.Parse(f)
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to parse lockfile %s", opts.LockfilePath)
-		}
-	} else {
-		lf = &lockfile.Lockfile{}
+	f, err := os.Open(s.lockfilePath)
+	if os.IsNotExist(err) {
+		// No lockfile, create an empty one
+		s.lf = &lockfile.Lockfile{}
+		return s, nil
 	}
-
-	if opts.Go == nil {
-		opts.Go = cache.NewGo()
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to open file %s", s.lockfilePath)
 	}
+	defer f.Close()
 
-	return &Shed{
-		cache:        cache.New(opts.CacheDir, opts.Go, opts.Logger),
-		lf:           lf,
-		lockfilePath: opts.LockfilePath,
-		logger:       opts.Logger,
-	}, nil
+	s.lf, err = lockfile.Parse(f)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to parse lockfile %s", s.lockfilePath)
+	}
+	return s, nil
+}
+
+// Option is a function that takes a Shed instance and applies a configuration to it.
+type Option func(*Shed)
+
+// WithLockfilePath sets the path to lockfile.
+func WithLockfilePath(lfp string) Option {
+	return func(s *Shed) {
+		s.lockfilePath = lfp
+	}
+}
+
+// WithLogger sets a logger that should be used for writing debug messages.
+// By default no logging is done.
+func WithLogger(logger logrus.FieldLogger) Option {
+	return func(s *Shed) {
+		s.logger = logger
+	}
+}
+
+// WithCache sets the Cache instance to use for installing tools.
+func WithCache(c *cache.Cache) Option {
+	return func(s *Shed) {
+		s.cache = c
+	}
 }
 
 // CacheDir returns the OS filesystem directory where the shed cache is located.
@@ -108,9 +109,7 @@ func (s *Shed) writeLockfile() error {
 		return errors.Wrapf(err, "failed to create/open file %s", s.lockfilePath)
 	}
 	defer f.Close()
-
-	_, err = s.lf.WriteTo(f)
-	if err != nil {
+	if _, err = s.lf.WriteTo(f); err != nil {
 		return errors.Wrapf(err, "failed to write lockfile to %s", s.lockfilePath)
 	}
 	return nil
@@ -155,7 +154,6 @@ func (s *Shed) Install(allowUpdates bool, toolNames ...string) error {
 		seenTools[t.ImportPath] = true
 		tools = append(tools, t)
 	}
-
 	if len(errs) > 0 {
 		return errs
 	}
@@ -203,7 +201,6 @@ func (s *Shed) Uninstall(toolNames ...string) error {
 		}
 		tools = append(tools, t)
 	}
-
 	if len(errs) > 0 {
 		return errs
 	}
