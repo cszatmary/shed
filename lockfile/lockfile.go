@@ -27,7 +27,7 @@ var ErrMultipleTools = errors.New("lockfile: multiple tools found with the same 
 // track of installed tools as well as their versions so shed can always
 // re-install the same version of each tool.
 //
-// An a zero value Lockfile is a valid empty lockfile ready for use.
+// A zero value Lockfile is a valid empty lockfile ready for use.
 type Lockfile struct {
 	// tools stores the tools managed by this lockfile. Tools are stored
 	// as a map of tool names to buckets of tools with that name.
