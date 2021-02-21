@@ -1,8 +1,11 @@
 package cmd
 
 import (
+	"os"
+
 	"github.com/getshiphub/shed/client"
 	"github.com/getshiphub/shed/internal/util"
+	"github.com/mattn/go-isatty"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -16,8 +19,6 @@ type rootOptions struct {
 
 var (
 	rootOpts rootOptions
-	shed     *client.Shed
-	logger   = logrus.StandardLogger()
 	fatal    = util.Fatal{}
 )
 
@@ -27,18 +28,6 @@ var rootCmd = &cobra.Command{
 	Short:   "shed is a CLI for easily managing Go tool dependencies.",
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		fatal.ShowErrorDetail = rootOpts.verbose
-		if rootOpts.verbose {
-			logger.SetLevel(logrus.DebugLevel)
-		}
-		logger.SetFormatter(&logrus.TextFormatter{
-			DisableTimestamp: true,
-		})
-
-		var err error
-		shed, err = client.NewShed(client.WithLogger(logger))
-		if err != nil {
-			fatal.ExitErrf(err, "Failed to setup shed")
-		}
 	},
 }
 
@@ -50,5 +39,32 @@ func init() {
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		fatal.ExitErrf(err, "Failed executing command.")
+	}
+}
+
+func mustShed(opts ...client.Option) *client.Shed {
+	shed, err := client.NewShed(opts...)
+	if err != nil {
+		fatal.ExitErrf(err, "Failed to setup shed")
+	}
+	return shed
+}
+
+func newLogger() *logrus.Logger {
+	level := logrus.InfoLevel
+	if rootOpts.verbose {
+		level = logrus.DebugLevel
+	}
+	return &logrus.Logger{
+		Out: os.Stderr,
+		Formatter: &logrus.TextFormatter{
+			DisableTimestamp: true,
+			// Need to force colours since the decision of whether or not to use colour
+			// is made lazily the first time a log is written, and Out may be changed
+			// to a spinner before then.
+			ForceColors: isatty.IsTerminal(os.Stderr.Fd()),
+		},
+		Hooks: make(logrus.LevelHooks),
+		Level: level,
 	}
 }

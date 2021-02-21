@@ -21,6 +21,7 @@ var cacheCleanCmd = &cobra.Command{
 	Long: `Cleans the shed cache by removing all installed tools.
 This is useful for removing any stale tools that are no longer needed.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		shed := mustShed()
 		if err := shed.CleanCache(); err != nil {
 			fatal.ExitErrf(err, "Failed to clean cache directory")
 		}
@@ -32,6 +33,7 @@ var cacheDirCmd = &cobra.Command{
 	Short: "Prints the path to the shed cache directory.",
 	Long:  `Prints the absolute path to the root shed cache directory where tools are installed.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		shed := mustShed()
 		fmt.Println(shed.CacheDir())
 	},
 }

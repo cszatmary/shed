@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"os"
+
+	"github.com/getshiphub/shed/client"
 	"github.com/getshiphub/shed/internal/spinner"
 	"github.com/spf13/cobra"
 )
@@ -44,18 +47,21 @@ Install all tools specified in shed.lock:
 
 	shed install`,
 	Run: func(cmd *cobra.Command, args []string) {
-		s := spinner.New(spinner.Options{
-			Suffix: " Installing tools",
+		s := spinner.NewTTY(spinner.Options{
+			Message:         "Installing tools",
+			PersistMessages: rootOpts.verbose,
 		})
-		if !rootOpts.verbose {
-			s.Start()
-		}
+		logger := newLogger()
+		logger.Out = s
+		shed := mustShed(client.WithLogger(logger))
+		s.Start()
 
 		err := shed.Install(installOpts.allowUpdates, args...)
 		s.Stop()
 		if err != nil {
 			fatal.ExitErrf(err, "Failed to install tools")
 		}
+		logger.Out = os.Stderr
 		logger.Info("Finished installing tools")
 	},
 }
