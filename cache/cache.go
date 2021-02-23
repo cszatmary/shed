@@ -5,6 +5,7 @@
 package cache
 
 import (
+	"context"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -88,7 +89,16 @@ func (c *Cache) toolsDir() string {
 // an error will be returned. If t.Version is empty, then the latest version
 // of the tool will be installed. The returned tool will have Version set
 // to the version that was installed.
-func (c *Cache) Install(t tool.Tool) (tool.Tool, error) {
+//
+// The provided context is used to terminate the install if the context becomes
+// done before the install completes on its own.
+func (c *Cache) Install(ctx context.Context, t tool.Tool) (tool.Tool, error) {
+	select {
+	case <-ctx.Done():
+		return t, ctx.Err()
+	default:
+	}
+
 	// Make sure import path is set as it's required for download
 	if t.ImportPath == "" {
 		return t, errors.New("import path is required on module")
@@ -96,7 +106,7 @@ func (c *Cache) Install(t tool.Tool) (tool.Tool, error) {
 
 	// Download step
 
-	downloadedTool, err := c.download(t)
+	downloadedTool, err := c.download(ctx, t)
 	if err != nil {
 		return t, errors.WithMessagef(err, "failed to download tool: %s", t)
 	}
@@ -125,7 +135,7 @@ func (c *Cache) Install(t tool.Tool) (tool.Tool, error) {
 		return downloadedTool, nil
 	}
 
-	err = c.goClient.Build(downloadedTool.ImportPath, binPath, binDir)
+	err = c.goClient.Build(ctx, downloadedTool.ImportPath, binPath, binDir)
 	if err != nil {
 		return downloadedTool, errors.WithMessagef(err, "failed to build tool: %s", downloadedTool)
 	}
@@ -146,7 +156,7 @@ func (c *Cache) Install(t tool.Tool) (tool.Tool, error) {
 // For example if the import path is golang.org/x/tools/cmd/stringer then download will create
 // BASE_DIR/golang.org/x/tools/cmd/stringer@VERSION/go.mod where BASE_DIR is the baseDir parameter
 // and VERSION is the version of the tool (either explicit or resolved).
-func (c *Cache) download(t tool.Tool) (tool.Tool, error) {
+func (c *Cache) download(ctx context.Context, t tool.Tool) (tool.Tool, error) {
 	// Get the path to where the tool will be installed
 	// This is where the go.mod file will be
 	fp, err := t.Filepath()
@@ -227,7 +237,7 @@ func (c *Cache) download(t tool.Tool) (tool.Tool, error) {
 		// go get so we don't need to reinvent the module resolution & downloading.
 		// Also we can reuse an existing download that's already cached.
 
-		err = c.goClient.GetD(t.Module(), modDir)
+		err = c.goClient.GetD(ctx, t.Module(), modDir)
 		if err != nil {
 			return t, err
 		}
@@ -264,7 +274,7 @@ func (c *Cache) download(t tool.Tool) (tool.Tool, error) {
 
 	// Download the module source. This will do the heavy lifting to figure out
 	// the correct version.
-	err = c.goClient.GetD(t.Module(), modDir)
+	err = c.goClient.GetD(ctx, t.Module(), modDir)
 	if err != nil {
 		return t, err
 	}

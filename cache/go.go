@@ -2,6 +2,7 @@ package cache
 
 import (
 	"bytes"
+	"context"
 	"go/build"
 	"io/ioutil"
 	"os"
@@ -48,19 +49,25 @@ func createGoModFile(mod, dir string) error {
 	return nil
 }
 
-// Go represents the core functionality provided by the go command. It allows for downloading
-// and building of modules.
+// Go represents the core functionality provided by the go command.
+// It allows for downloading and building of modules.
 type Go interface {
 	// Build builds pkg and outputs the binary at outPath. dir is used as the working directory
 	// when building. pkg must be a valid import path.
 	// Build functions like 'go build -o'.
-	Build(pkg, outPath, dir string) error
+	//
+	// The provided context is used to terminate the build if the context becomes
+	// done before the build completes on its own.
+	Build(ctx context.Context, pkg, outPath, dir string) error
 	// GetD downloads the source code for the module mod. dir is used as the working directory
 	// and is expected to contain a go.mod file which will be updated with the installed module.
 	// mod must be a valid module name, that is an import path, optionally with a version.
 	// If no version is provided, the latest version will be downloaded.
 	// GetD functions like 'got get -d' in module aware mode.
-	GetD(mod, dir string) error
+	//
+	// The provided context is used to terminate the download if the context becomes
+	// done before the download completes on its own.
+	GetD(ctx context.Context, mod, dir string) error
 }
 
 // realGo is the main implementation of the Go interface.
@@ -72,16 +79,16 @@ func NewGo() Go {
 	return realGo{}
 }
 
-func (realGo) Build(pkg, outPath, dir string) error {
-	return execGo(dir, "build", "-o", outPath, pkg)
+func (realGo) Build(ctx context.Context, pkg, outPath, dir string) error {
+	return execGo(ctx, dir, "build", "-o", outPath, pkg)
 }
 
-func (realGo) GetD(mod, dir string) error {
-	return execGo(dir, "get", "-d", mod)
+func (realGo) GetD(ctx context.Context, mod, dir string) error {
+	return execGo(ctx, dir, "get", "-d", mod)
 }
 
-func execGo(dir string, args ...string) error {
-	cmd := exec.Command("go", args...)
+func execGo(ctx context.Context, dir string, args ...string) error {
+	cmd := exec.CommandContext(ctx, "go", args...)
 	cmd.Dir = dir
 	stderr := &bytes.Buffer{}
 	cmd.Stderr = stderr
@@ -142,7 +149,7 @@ func NewMockGo(tools map[string]map[string]string) (Go, error) {
 	return &mockGo{registry: registry}, nil
 }
 
-func (mg *mockGo) Build(pkg, outPath, dir string) error {
+func (mg *mockGo) Build(ctx context.Context, pkg, outPath, dir string) error {
 	if _, ok := mg.registry[pkg]; !ok {
 		return errors.Errorf("unknown package %s", pkg)
 	}
@@ -157,7 +164,7 @@ func (mg *mockGo) Build(pkg, outPath, dir string) error {
 	return nil
 }
 
-func (mg *mockGo) GetD(mod, dir string) error {
+func (mg *mockGo) GetD(ctx context.Context, mod, dir string) error {
 	t, err := tool.ParseLax(mod)
 	if err != nil {
 		return err

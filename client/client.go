@@ -2,10 +2,10 @@
 package client
 
 import (
+	"context"
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"sort"
 
 	"github.com/getshiphub/shed/cache"
 	"github.com/getshiphub/shed/lockfile"
@@ -115,14 +115,18 @@ func (s *Shed) writeLockfile() error {
 	return nil
 }
 
-// Install installs zero or more given tools and add them to the lockfile.
-// It also checks if any tools in the lockfile are not installed and installs
-// them if so.
+// Install computes a set of tools that should be installed. It can be given zero or
+// more tools as arguments. These will be unioned with the tools in the lockfile
+// to produce a final set of tools to install. Install will return an InstallSet instance
+// which can be used to perform the actual installation.
+//
+// Install does not modify any state, therefore, if you wish to abort the install simply
+// discard the returned InstallSet.
 //
 // If a tool name is provided with a version and the same tool already exists in the
 // lockfile with a different version, then Install will return an error, unless allowUpdates
 // is set in which case the given tool version will overwrite the one in the lockfile.
-func (s *Shed) Install(allowUpdates bool, toolNames ...string) error {
+func (s *Shed) Install(allowUpdates bool, toolNames ...string) (*InstallSet, error) {
 	// Collect all the tools that need to be installed.
 	// Merge the given tools with what exists in the lockfile.
 	seenTools := make(map[string]bool)
@@ -155,7 +159,7 @@ func (s *Shed) Install(allowUpdates bool, toolNames ...string) error {
 		tools = append(tools, t)
 	}
 	if len(errs) > 0 {
-		return errs
+		return nil, errs
 	}
 
 	// Take union with lockfile
@@ -166,22 +170,75 @@ func (s *Shed) Install(allowUpdates bool, toolNames ...string) error {
 			tools = append(tools, t)
 		}
 	}
+	return &InstallSet{s: s, tools: tools}, nil
+}
 
-	// Sort the tools so they are always installed in the same order
-	sort.Slice(tools, func(i, j int) bool {
-		return tools[i].ImportPath < tools[j].ImportPath
-	})
+// InstallSet represents a set of tools that are to be installed.
+// To perform the installation call the Apply method.
+// To abort the install, simply discard the InstallSet object.
+type InstallSet struct {
+	s        *Shed
+	tools    []tool.Tool
+	notifyCh chan<- tool.Tool
+}
 
-	for _, t := range tools {
-		s.logger.Debugf("Installing tool: %v", t)
-		installedTool, err := s.cache.Install(t)
-		if err != nil {
-			return errors.WithMessagef(err, "failed to install tool %s", t)
-		}
-		s.lf.PutTool(installedTool)
+// Len returns the number of tools in the InstallSet.
+func (is *InstallSet) Len() int {
+	return len(is.tools)
+}
+
+// Notify causes the InstallSet to relay completed actions to ch.
+// This is useful to keep track of the progress of installation.
+// You should receive from ch on a separate goroutine than the one that
+// Apply is called on, since Apply will block until all tools are installed.
+func (is *InstallSet) Notify(ch chan<- tool.Tool) {
+	is.notifyCh = ch
+}
+
+// Apply will install each tool in the InstallSet and add them to the lockfile.
+//
+// The provided context is used to terminate the install if the context becomes
+// done before the install completes on its own.
+func (is *InstallSet) Apply(ctx context.Context) error {
+	successCh := make(chan tool.Tool)
+	failedCh := make(chan error)
+	for _, tl := range is.tools {
+		go func(t tool.Tool) {
+			is.s.logger.Debugf("Installing tool: %v", t)
+			installed, err := is.s.cache.Install(ctx, t)
+			if err != nil {
+				failedCh <- errors.WithMessagef(err, "failed to install tool %s", t)
+				return
+			}
+			successCh <- installed
+		}(tl)
 	}
 
-	if err := s.writeLockfile(); err != nil {
+	var installedTools []tool.Tool
+	var errs lockfile.ErrorList
+	for i := 0; i < len(is.tools); i++ {
+		select {
+		case t := <-successCh:
+			installedTools = append(installedTools, t)
+			if is.notifyCh != nil {
+				is.notifyCh <- t
+			}
+		case err := <-failedCh:
+			// Continue even if a tool failed because they are cached so it will
+			// save work on subsequent runs.
+			errs = append(errs, err)
+		case <-ctx.Done():
+			return errors.Wrap(ctx.Err(), "installation was aborted")
+		}
+	}
+	if len(errs) > 0 {
+		return errs
+	}
+
+	for _, t := range installedTools {
+		is.s.lf.PutTool(t)
+	}
+	if err := is.s.writeLockfile(); err != nil {
 		return err
 	}
 	return nil
