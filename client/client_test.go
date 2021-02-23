@@ -1,6 +1,7 @@
 package client_test
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -94,6 +95,7 @@ func TestInstall(t *testing.T) {
 		lockfileTools []tool.Tool
 		installTools  []string
 		allowUpdates  bool
+		wantLen       int
 		wantTools     []tool.Tool
 	}{
 		{
@@ -105,6 +107,7 @@ func TestInstall(t *testing.T) {
 				"github.com/Shopify/ejson/cmd/ejson",
 			},
 			allowUpdates: false,
+			wantLen:      3,
 			wantTools: []tool.Tool{
 				{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"},
 				{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.33.0"},
@@ -120,6 +123,7 @@ func TestInstall(t *testing.T) {
 				"github.com/Shopify/ejson/cmd/ejson@v1.1.0",
 			},
 			allowUpdates: false,
+			wantLen:      3,
 			wantTools: []tool.Tool{
 				{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.0.0-20201203230243-22d10c9b658d"},
 				{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.28.3"},
@@ -135,6 +139,7 @@ func TestInstall(t *testing.T) {
 			},
 			installTools: nil,
 			allowUpdates: false,
+			wantLen:      3,
 			wantTools: []tool.Tool{
 				{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"},
 				{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.28.3"},
@@ -152,6 +157,7 @@ func TestInstall(t *testing.T) {
 				"github.com/golangci/golangci-lint/cmd/golangci-lint@v1.33.0",
 			},
 			allowUpdates: true,
+			wantLen:      3,
 			wantTools: []tool.Tool{
 				{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"},
 				{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.33.0"},
@@ -182,7 +188,14 @@ func TestInstall(t *testing.T) {
 				t.Fatalf("failed to create shed client %v", err)
 			}
 
-			err = s.Install(tt.allowUpdates, tt.installTools...)
+			installSet, err := s.Install(tt.allowUpdates, tt.installTools...)
+			if err != nil {
+				t.Errorf("want nil error, got %v", err)
+			}
+			if installSet.Len() != tt.wantLen {
+				t.Errorf("want install set len %d, got %d", tt.wantLen, installSet.Len())
+			}
+			err = installSet.Apply(context.Background())
 			if err != nil {
 				t.Errorf("want nil error, got %v", err)
 			}
@@ -225,7 +238,7 @@ func TestInstallError(t *testing.T) {
 		t.Fatalf("failed to create shed client %v", err)
 	}
 
-	err = s.Install(
+	_, err = s.Install(
 		false,
 		"github.com/cszatmary/go-fish",
 		"golangci-lint",

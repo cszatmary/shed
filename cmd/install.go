@@ -1,10 +1,14 @@
 package cmd
 
 import (
+	"context"
+	"errors"
 	"os"
+	"os/signal"
 
 	"github.com/getshiphub/shed/client"
 	"github.com/getshiphub/shed/internal/spinner"
+	"github.com/getshiphub/shed/tool"
 	"github.com/spf13/cobra"
 )
 
@@ -47,21 +51,50 @@ Install all tools specified in shed.lock:
 
 	shed install`,
 	Run: func(cmd *cobra.Command, args []string) {
+		logger := newLogger()
+		shed := mustShed(client.WithLogger(logger))
+		installSet, err := shed.Install(installOpts.allowUpdates, args...)
+		if err != nil {
+			fatal.ExitErrf(err, "Failed to determine list of tools to install")
+		}
+
 		s := spinner.NewTTY(spinner.Options{
 			Message:         "Installing tools",
+			Count:           installSet.Len(),
 			PersistMessages: rootOpts.verbose,
 		})
-		logger := newLogger()
 		logger.Out = s
-		shed := mustShed(client.WithLogger(logger))
-		s.Start()
+		ch := make(chan tool.Tool, installSet.Len())
+		installSet.Notify(ch)
+		go func() {
+			for range ch {
+				s.Inc()
+			}
+		}()
 
-		err := shed.Install(installOpts.allowUpdates, args...)
+		// Listen of SIGINT to do a graceful abort
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		abort := make(chan os.Signal, 1)
+		signal.Notify(abort, os.Interrupt)
+		go func() {
+			<-abort
+			cancel()
+		}()
+
+		s.Start()
+		err = installSet.Apply(ctx)
 		s.Stop()
+		close(ch)
+		logger.Out = os.Stderr
+
+		if errors.Is(err, context.Canceled) {
+			logger.Info("Install aborted")
+			return
+		}
 		if err != nil {
 			fatal.ExitErrf(err, "Failed to install tools")
 		}
-		logger.Out = os.Stderr
 		logger.Info("Finished installing tools")
 	},
 }
