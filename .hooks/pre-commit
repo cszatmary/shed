@@ -1,0 +1,12 @@
+#!/bin/sh
+. "$(dirname "$0")/go-fish/go-fish.sh"
+
+[ -n "$CI" ] && exit 0
+
+shed() {
+    go run main.go "$@"
+}
+
+if GO_FILES="$(git diff --name-only --staged --diff-filter=ACMR | grep "\.go$")"; then
+    shed run goimports -- -w $GO_FILES && git add $GO_FILES
+fi

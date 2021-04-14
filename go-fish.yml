@@ -1,7 +1,0 @@
-skipCI: true
-hooks:
-  pre-commit:
-    run: >
-      if GO_FILES="$(echo "$STAGED_FILES" | grep "\.go$")" ; then
-        gofmt -w $GO_FILES && git add $GO_FILES
-      fi

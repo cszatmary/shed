@@ -2,7 +2,7 @@ project_name: shed
 
 before:
   hooks:
-    - go mod download
+    - go mod tidy
     - make completions
 
 builds:
@@ -46,7 +46,7 @@ release:
 
 # TODO(@cszatmary): Figure out homebrew release
 # brews:
-#   - github:
+#   - tap:
 #       owner: getshiphub
 #       name: homebrew-tap
 #     commit_author:
@@ -58,5 +58,5 @@ release:
 #       system "#{bin}/shed --version"
 #     install: |
 #       bin.install "shed"
-#       bash_completion.install "dist/completions/shed.bash"
-#       zsh_completion.install "dist/completions/_shed"
+#       bash_completion.install "completions/shed.bash"
+#       zsh_completion.install "completions/_shed"
