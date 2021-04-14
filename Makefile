@@ -5,7 +5,7 @@ COVERPKGS = ./cache,./client,./internal/spinner,./internal/util,./lockfile,./too
 # Get all dependencies
 setup:
 	@echo Installing dependencies
-	@go mod download
+	@go mod tidy
 # Self-hoisted!
 	@echo Installing tool dependencies
 	@$(SHED) install
@@ -19,6 +19,13 @@ build:
 build-snapshot:
 	@$(SHED) run goreleaser build -- --snapshot --rm-dist
 .PHONY: build-snapshot
+
+release:
+	$(if $(version),,$(error version variable is not set))
+	git tag -a v$(version) -m "v$(version)"
+	git push origin v$(version)
+	$(SHED) run goreleaser release -- --rm-dist
+.PHONY: release
 
 # Generate shell completions for distribution
 completions:
@@ -36,7 +43,7 @@ clean:
 .PHONY: clean
 
 fmt:
-	@gofmt -w .
+	@$(SHED) run goimports -- -w .
 .PHONY: fmt
 
 check-fmt:
