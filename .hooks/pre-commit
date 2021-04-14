@@ -1,11 +1,11 @@
 #!/bin/sh
 . "$(dirname "$0")/go-fish/go-fish.sh"
 
-# Add hook commands
-
 [ -n "$CI" ] && exit 0
 
-alias shed='go run main.go'
+shed() {
+    go run main.go "$@"
+}
 
 if GO_FILES="$(git diff --name-only --staged --diff-filter=ACMR | grep "\.go$")"; then
     shed run goimports -- -w $GO_FILES && git add $GO_FILES

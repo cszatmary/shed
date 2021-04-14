@@ -1,6 +1,10 @@
 #!/bin/bash
 
-alias shed='go run main.go'
+set -eo pipefail
+
+shed() {
+    go run main.go "$@"
+}
 
 if [ "$(shed run goimports -- -l . | wc -l)" -gt 0 ]; then
     echo "Unformatted files found:"
