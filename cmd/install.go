@@ -52,6 +52,7 @@ Install all tools specified in shed.lock:
 	shed install`,
 	Run: func(cmd *cobra.Command, args []string) {
 		logger := newLogger()
+		setwd(logger)
 		shed := mustShed(client.WithLogger(logger))
 		installSet, err := shed.Install(installOpts.allowUpdates, args...)
 		if err != nil {
