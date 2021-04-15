@@ -14,6 +14,74 @@ import (
 	"github.com/getshiphub/shed/tool"
 )
 
+func TestResolveLockfilePath(t *testing.T) {
+	tests := []struct {
+		name     string
+		cwd      string
+		location string
+		want     string
+	}{
+		{
+			name:     "current directory",
+			cwd:      "a/b",
+			location: "a/b/shed.lock",
+			want:     "a/b/shed.lock",
+		},
+		{
+			name:     "parent directory",
+			cwd:      "a/b",
+			location: "a/shed.lock",
+			want:     "a/shed.lock",
+		},
+		{
+			name:     "ancestor directory",
+			cwd:      "a/b/c/d",
+			location: "a/shed.lock",
+			want:     "a/shed.lock",
+		},
+		{
+			name:     "does not look in sibling directory",
+			cwd:      "a/b",
+			location: "a/c/shed.lock",
+			want:     "",
+		},
+		{
+			name: "does not exist",
+			cwd:  "a/b",
+			want: "",
+		},
+		{
+			name:     "current directory",
+			cwd:      "",
+			location: "shed.lock",
+			want:     "shed.lock",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			td := t.TempDir()
+			if tt.location != "" {
+				p := filepath.Join(td, filepath.FromSlash(tt.location))
+				dir := filepath.Dir(p)
+				if err := os.MkdirAll(dir, 0o755); err != nil {
+					t.Fatalf("failed to create directory %s: %v", dir, err)
+				}
+				createLockfile(t, p, nil)
+			}
+
+			cwd := filepath.Join(td, filepath.FromSlash(tt.cwd))
+			got := client.ResolveLockfilePath(cwd)
+			if tt.want != "" {
+				tt.want = filepath.Join(td, filepath.FromSlash(tt.want))
+			}
+			if got != tt.want {
+				t.Errorf("got lockfile path %s, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestClientCache(t *testing.T) {
 	td := t.TempDir()
 	s, err := client.NewShed(client.WithCache(cache.New(td)))

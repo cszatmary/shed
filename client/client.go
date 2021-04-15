@@ -8,11 +8,35 @@ import (
 	"path/filepath"
 
 	"github.com/getshiphub/shed/cache"
+	"github.com/getshiphub/shed/internal/util"
 	"github.com/getshiphub/shed/lockfile"
 	"github.com/getshiphub/shed/tool"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
+
+const LockfileName = "shed.lock"
+
+// ResolveLockfilePath resolves the path to the nearest shed lockfile starting at dir.
+// It will keep searching parent directories until either a lockfile is found,
+// or the root directory is reached. If no lockfile is found, an empty string will be returned.
+func ResolveLockfilePath(dir string) string {
+	// "" is synonymous with "."
+	// This makes sure we do at least one check in the current directory
+	if dir == "" {
+		dir = "."
+	}
+	var prev string
+	for dir != prev {
+		p := filepath.Join(dir, LockfileName)
+		if util.FileOrDirExists(p) {
+			return p
+		}
+		prev = dir
+		dir = filepath.Dir(dir)
+	}
+	return ""
+}
 
 // Shed provides the API for managing tool dependencies with shed.
 type Shed struct {
@@ -33,7 +57,7 @@ func NewShed(opts ...Option) (*Shed, error) {
 
 	// Set defaults
 	if s.lockfilePath == "" {
-		s.lockfilePath = "shed.lock"
+		s.lockfilePath = LockfileName
 	}
 	if s.logger == nil {
 		// Logging is disabled by default, but we don't want to have to check
