@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 
+	"github.com/getshiphub/shed/client"
 	"github.com/getshiphub/shed/lockfile"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -29,7 +30,9 @@ Or:
 	shed run golang.org/x/tools/cmd/stringer -- -type=Pill`,
 	Run: func(cmd *cobra.Command, args []string) {
 		toolName := args[0]
-		shed := mustShed()
+		logger := newLogger()
+		setwd(logger)
+		shed := mustShed(client.WithLogger(logger))
 		binPath, err := shed.ToolPath(toolName)
 		if errors.Is(err, lockfile.ErrNotFound) {
 			fatal.Exitf("No tool named %s installed. Run 'shed install' first to install the tool.", toolName)
@@ -39,7 +42,6 @@ Or:
 			fatal.ExitErrf(err, "Failed to run tool %s", toolName)
 		}
 
-		logger := newLogger()
 		logger.WithFields(logrus.Fields{
 			"tool": toolName,
 			"path": binPath,

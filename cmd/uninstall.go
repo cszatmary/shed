@@ -33,6 +33,7 @@ Or:
 		})
 		logger := newLogger()
 		logger.Out = s
+		setwd(logger)
 		shed := mustShed(client.WithLogger(logger))
 		s.Start()
 

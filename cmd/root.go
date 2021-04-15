@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"os"
+	"path/filepath"
 
 	"github.com/getshiphub/shed/client"
 	"github.com/getshiphub/shed/internal/util"
@@ -66,5 +67,25 @@ func newLogger() *logrus.Logger {
 		},
 		Hooks: make(logrus.LevelHooks),
 		Level: level,
+	}
+}
+
+// setwd finds the nearest shed lockfile in either the current directory or parent directories
+// and changes the current working directory.
+func setwd(logger *logrus.Logger) {
+	// Find the nearest shed lockfile and change the current directory
+	// This way shed can still work if it's run in a subdirectory of a project
+	cwd, err := os.Getwd()
+	if err != nil {
+		fatal.ExitErrf(err, "Failed to get current working directory")
+	}
+	lfp := client.ResolveLockfilePath(cwd)
+	if lfp != "" {
+		logger.Debugf("Found lockfile: %s", lfp)
+		dir := filepath.Dir(lfp)
+		if err := os.Chdir(dir); err != nil {
+			fatal.ExitErrf(err, "Failed to change current working directory to %s", dir)
+		}
+		logger.Debugf("Changed current working directory to %s", dir)
 	}
 }
