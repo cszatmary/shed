@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/getshiphub/shed/cache"
 	"github.com/getshiphub/shed/internal/util"
@@ -305,4 +306,17 @@ func (s *Shed) ToolPath(toolName string) (string, error) {
 		return "", err
 	}
 	return s.cache.ToolPath(t)
+}
+
+// List returns a list of all the tools specified in the lockfile.
+func (s *Shed) List() []tool.Tool {
+	var tools []tool.Tool
+	it := s.lf.Iter()
+	for it.Next() {
+		tools = append(tools, it.Value())
+	}
+	sort.Slice(tools, func(i, j int) bool {
+		return tools[i].ImportPath < tools[j].ImportPath
+	})
+	return tools
 }
