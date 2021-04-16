@@ -12,12 +12,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type installOptions struct {
-	allowUpdates bool
-}
-
-var installOpts installOptions
-
 var installCmd = &cobra.Command{
 	Use:   "install [tools...]",
 	Args:  cobra.ArbitraryArgs,
@@ -32,10 +26,6 @@ The format is identical to what would be passed to 'go get'. Tools may specify a
 an '@', just like with 'go get' in module-aware mode. If no version is provided, the latest version will be installed.
 
 If no tools are provided, then shed will simply install all tools in the lockfile.
-
-By default shed prevents installing a tool if a different version of the same tool already exists in the shed.lock file.
-If you wish to update the tool, the '-u' or '--update' flag can be used. This will cause shed to install the new version
-of the tool specified and update the shed.lock file.
 
 Examples:
 
@@ -54,7 +44,7 @@ Install all tools specified in shed.lock:
 		logger := newLogger()
 		setwd(logger)
 		shed := mustShed(client.WithLogger(logger))
-		installSet, err := shed.Install(installOpts.allowUpdates, args...)
+		installSet, err := shed.Install(args...)
 		if err != nil {
 			fatal.ExitErrf(err, "Failed to determine list of tools to install")
 		}
@@ -101,6 +91,5 @@ Install all tools specified in shed.lock:
 }
 
 func init() {
-	installCmd.Flags().BoolVarP(&installOpts.allowUpdates, "update", "u", false, "allow updating already installed tools")
 	rootCmd.AddCommand(installCmd)
 }

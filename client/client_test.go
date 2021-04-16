@@ -163,7 +163,6 @@ func TestInstall(t *testing.T) {
 		name          string
 		lockfileTools []tool.Tool
 		installTools  []string
-		allowUpdates  bool
 		wantLen       int
 		wantTools     []tool.Tool
 	}{
@@ -175,8 +174,7 @@ func TestInstall(t *testing.T) {
 				"github.com/golangci/golangci-lint/cmd/golangci-lint",
 				"github.com/Shopify/ejson/cmd/ejson",
 			},
-			allowUpdates: false,
-			wantLen:      3,
+			wantLen: 3,
 			wantTools: []tool.Tool{
 				{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"},
 				{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.33.0"},
@@ -191,8 +189,7 @@ func TestInstall(t *testing.T) {
 				"github.com/golangci/golangci-lint/cmd/golangci-lint@v1.28.3",
 				"github.com/Shopify/ejson/cmd/ejson@v1.1.0",
 			},
-			allowUpdates: false,
-			wantLen:      3,
+			wantLen: 3,
 			wantTools: []tool.Tool{
 				{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.0.0-20201203230243-22d10c9b658d"},
 				{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.28.3"},
@@ -207,7 +204,6 @@ func TestInstall(t *testing.T) {
 				{ImportPath: "github.com/Shopify/ejson/cmd/ejson", Version: "v1.1.0"},
 			},
 			installTools: nil,
-			allowUpdates: false,
 			wantLen:      3,
 			wantTools: []tool.Tool{
 				{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"},
@@ -225,8 +221,7 @@ func TestInstall(t *testing.T) {
 			installTools: []string{
 				"github.com/golangci/golangci-lint/cmd/golangci-lint@v1.33.0",
 			},
-			allowUpdates: true,
-			wantLen:      3,
+			wantLen: 3,
 			wantTools: []tool.Tool{
 				{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"},
 				{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.33.0"},
@@ -257,7 +252,7 @@ func TestInstall(t *testing.T) {
 				t.Fatalf("failed to create shed client %v", err)
 			}
 
-			installSet, err := s.Install(tt.allowUpdates, tt.installTools...)
+			installSet, err := s.Install(tt.installTools...)
 			if err != nil {
 				t.Errorf("want nil error, got %v", err)
 			}
@@ -308,7 +303,6 @@ func TestInstallError(t *testing.T) {
 	}
 
 	_, err = s.Install(
-		false,
 		"github.com/cszatmary/go-fish",
 		"golangci-lint",
 		"github.com/Shopify/ejson/cmd/ejson@v1.2.2",
@@ -317,7 +311,7 @@ func TestInstallError(t *testing.T) {
 	if !ok {
 		t.Errorf("want error to be lockfile.ErrorList, got %s: %T", err, err)
 	}
-	wantLen := 2
+	wantLen := 1
 	if len(errList) != wantLen {
 		t.Errorf("got %d errors, want %d", len(errList), wantLen)
 	}

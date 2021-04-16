@@ -148,10 +148,9 @@ func (s *Shed) writeLockfile() error {
 // Install does not modify any state, therefore, if you wish to abort the install simply
 // discard the returned InstallSet.
 //
-// If a tool name is provided with a version and the same tool already exists in the
-// lockfile with a different version, then Install will return an error, unless allowUpdates
-// is set in which case the given tool version will overwrite the one in the lockfile.
-func (s *Shed) Install(allowUpdates bool, toolNames ...string) (*InstallSet, error) {
+// All tool names provided must be full import paths, not binary names.
+// If a tool name is invalid, Install will return an error.
+func (s *Shed) Install(toolNames ...string) (*InstallSet, error) {
 	// Collect all the tools that need to be installed.
 	// Merge the given tools with what exists in the lockfile.
 	seenTools := make(map[string]bool)
@@ -166,20 +165,6 @@ func (s *Shed) Install(allowUpdates bool, toolNames ...string) (*InstallSet, err
 			errs = append(errs, errors.WithMessagef(err, "invalid tool name %s", toolName))
 			continue
 		}
-
-		existing, err := s.lf.GetTool(toolName)
-		if errors.Is(err, lockfile.ErrIncorrectVersion) {
-			if !allowUpdates {
-				err := errors.Errorf("trying to install %s, but %s is in the lockfile", t, existing.Version)
-				errs = append(errs, err)
-				continue
-			}
-		} else if err != nil && !errors.Is(err, lockfile.ErrNotFound) {
-			// Shouldn't happen, but handle just to be safe
-			errs = append(errs, errors.WithMessagef(err, "failed to check if tool exists in lockfile: %s", t))
-			continue
-		}
-
 		seenTools[t.ImportPath] = true
 		tools = append(tools, t)
 	}
