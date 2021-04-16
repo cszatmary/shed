@@ -215,7 +215,7 @@ func TestSpinnerMaxMessageLength(t *testing.T) {
 		MaxMessageLength: 15,
 	})
 	s.Start()
-	time.Sleep(15 * time.Millisecond)
+	time.Sleep(25 * time.Millisecond)
 	s.Stop()
 
 	// wait a bit because the spinner still has to erase before stopping

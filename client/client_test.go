@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/getshiphub/shed/cache"
@@ -364,5 +365,28 @@ func TestUninstall(t *testing.T) {
 	wantTool := tool.Tool{ImportPath: "github.com/Shopify/ejson/cmd/ejson", Version: "v1.2.2"}
 	if tl != wantTool {
 		t.Errorf("got %+v, want %+v", tl, wantTool)
+	}
+}
+
+func TestList(t *testing.T) {
+	td := t.TempDir()
+	lockfilePath := filepath.Join(td, "shed.lock")
+	wantTools := []tool.Tool{
+		{ImportPath: "github.com/Shopify/ejson/cmd/ejson", Version: "v1.2.2"},
+		{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"},
+		{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.33.0"},
+	}
+	createLockfile(t, lockfilePath, wantTools)
+	s, err := client.NewShed(
+		client.WithLockfilePath(lockfilePath),
+		client.WithCache(cache.New(td)),
+	)
+	if err != nil {
+		t.Fatalf("failed to create shed client %v", err)
+	}
+
+	got := s.List()
+	if !reflect.DeepEqual(got, wantTools) {
+		t.Errorf("got tools %+v, want %+v", got, wantTools)
 	}
 }
