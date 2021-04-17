@@ -23,6 +23,11 @@ var ErrIncorrectVersion = errors.New("lockfile: incorrect version of tool")
 // in the lockfile.
 var ErrMultipleTools = errors.New("lockfile: multiple tools found with the same name")
 
+// ErrInvalidVersion is returned when adding a tool to a lockfile that does not have a
+// valid SemVer. The version in a lockfile must be an exact version, it cannot be
+// a module query (ex: branch name or commit SHA) or a shorthand version.
+var ErrInvalidVersion = errors.New("lockfile: tool has invalid version")
+
 // Lockfile represents a shed lockfile. The lockfile is responsible for keeping
 // track of installed tools as well as their versions so shed can always
 // re-install the same version of each tool.
@@ -93,9 +98,18 @@ func (lf *Lockfile) GetTool(name string) (tool.Tool, error) {
 }
 
 // PutTool adds or replaces the given tool in the lockfile.
-func (lf *Lockfile) PutTool(t tool.Tool) {
+//
+// t.Version must be a valid SemVer, that is t.HasSemver() must return true.
+// If t.Version is not a valid SemVer, ErrInvalidVersion will be returned.
+func (lf *Lockfile) PutTool(t tool.Tool) error {
 	if lf.tools == nil {
 		lf.tools = make(map[string][]tool.Tool)
+	}
+
+	// Invariant check: A tool inserted into the lockfile must have Version set to
+	// a valid SemVer otherwise it defeats the purpose of a lockfile.
+	if !t.HasSemver() {
+		return fmt.Errorf("%w: %v", ErrInvalidVersion, t)
 	}
 
 	toolName := t.Name()
@@ -117,11 +131,14 @@ func (lf *Lockfile) PutTool(t tool.Tool) {
 	if foundIndex == -1 {
 		bucket = append(bucket, t)
 	}
-
 	lf.tools[toolName] = bucket
+	return nil
 }
 
 // DeleteTool removes the given tool from the lockfile if it exists.
+// If t.Version is not empty, the tool will only be deleted from the lockfile
+// if it has the same version. If t.Version is empty, it will be deleted from the
+// lockfile regardless of version.
 func (lf *Lockfile) DeleteTool(t tool.Tool) {
 	toolName := t.Name()
 	bucket, ok := lf.tools[toolName]
@@ -131,12 +148,14 @@ func (lf *Lockfile) DeleteTool(t tool.Tool) {
 
 	foundIndex := -1
 	for i, tl := range bucket {
-		if t == tl {
+		if t.ImportPath != tl.ImportPath {
+			continue
+		}
+		if t.Version == "" || t.Version == tl.Version {
 			foundIndex = i
 			break
 		}
 	}
-
 	if foundIndex == -1 {
 		return
 	}
@@ -151,7 +170,6 @@ func (lf *Lockfile) DeleteTool(t tool.Tool) {
 		delete(lf.tools, toolName)
 		return
 	}
-
 	lf.tools[toolName] = bucket
 }
 

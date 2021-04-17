@@ -13,12 +13,23 @@ import (
 	"github.com/getshiphub/shed/tool"
 )
 
-func TestLockfileGet(t *testing.T) {
+func newLockfile(t *testing.T, tools []tool.Tool) *lockfile.Lockfile {
 	lf := &lockfile.Lockfile{}
-	lf.PutTool(tool.Tool{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"})
-	lf.PutTool(tool.Tool{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.33.0"})
-	lf.PutTool(tool.Tool{ImportPath: "golang.org/x/tools/cmd/stringer", Version: "v0.0.0-20201211185031-d93e913c1a58"})
-	lf.PutTool(tool.Tool{ImportPath: "example.org/z/random/stringer/v2/cmd/stringer", Version: "v2.1.0"})
+	for _, tl := range tools {
+		if err := lf.PutTool(tl); err != nil {
+			t.Fatalf("failed to add tool %v to lockfile: %v", tl, err)
+		}
+	}
+	return lf
+}
+
+func TestLockfileGet(t *testing.T) {
+	lf := newLockfile(t, []tool.Tool{
+		{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"},
+		{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.33.0"},
+		{ImportPath: "golang.org/x/tools/cmd/stringer", Version: "v0.0.0-20201211185031-d93e913c1a58"},
+		{ImportPath: "example.org/z/random/stringer/v2/cmd/stringer", Version: "v2.1.0"},
+	})
 
 	tests := []struct {
 		name     string
@@ -105,34 +116,77 @@ func TestLockfileGet(t *testing.T) {
 
 func TestLockfilePutReplace(t *testing.T) {
 	lf := &lockfile.Lockfile{}
-	lf.PutTool(tool.Tool{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"})
+	want := tool.Tool{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"}
+	if err := lf.PutTool(want); err != nil {
+		t.Fatalf("failed to add tool %v to lockfile: %v", want, err)
+	}
+
 	tl, err := lf.GetTool("go-fish")
 	if err != nil {
 		t.Errorf("want nil error, got %v", err)
 	}
-	want := tool.Tool{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"}
 	if tl != want {
 		t.Errorf("got %+v, want %+v", tl, want)
 	}
 
 	// Replace
-	lf.PutTool(tool.Tool{ImportPath: "github.com/cszatmary/go-fish", Version: "v1.0.0"})
+	want = tool.Tool{ImportPath: "github.com/cszatmary/go-fish", Version: "v1.0.0"}
+	err = lf.PutTool(want)
+	if err != nil {
+		t.Errorf("want nil error, got %v", err)
+	}
+
 	tl, err = lf.GetTool("go-fish")
 	if err != nil {
 		t.Errorf("want nil error, got %v", err)
 	}
-	want = tool.Tool{ImportPath: "github.com/cszatmary/go-fish", Version: "v1.0.0"}
 	if tl != want {
 		t.Errorf("got %+v, want %+v", tl, want)
 	}
 }
 
+func TestLockfilePutError(t *testing.T) {
+	tests := []struct {
+		name string
+		tool tool.Tool
+	}{
+		{
+			name: "missing version",
+			tool: tool.Tool{ImportPath: "github.com/cszatmary/go-fish", Version: ""},
+		},
+		{
+			name: "not version",
+			tool: tool.Tool{ImportPath: "github.com/cszatmary/go-fish", Version: "master"},
+		},
+		{
+			name: "invalid semver",
+			tool: tool.Tool{ImportPath: "github.com/cszatmary/go-fish", Version: "3.5.7.124"},
+		},
+		{
+			name: "shorthand semver",
+			tool: tool.Tool{ImportPath: "github.com/cszatmary/go-fish", Version: "v1.2"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lf := &lockfile.Lockfile{}
+			err := lf.PutTool(tt.tool)
+			if !errors.Is(err, lockfile.ErrInvalidVersion) {
+				t.Errorf("got error %v, want %v", err, lockfile.ErrInvalidVersion)
+			}
+		})
+	}
+}
+
 func TestLockfileDelete(t *testing.T) {
-	lf := &lockfile.Lockfile{}
-	lf.PutTool(tool.Tool{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"})
-	lf.PutTool(tool.Tool{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.33.0"})
-	lf.PutTool(tool.Tool{ImportPath: "golang.org/x/tools/cmd/stringer", Version: "v0.0.0-20201211185031-d93e913c1a58"})
-	lf.PutTool(tool.Tool{ImportPath: "example.org/z/random/stringer/v2/cmd/stringer", Version: "v2.1.0"})
+	lf := newLockfile(t, []tool.Tool{
+		{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"},
+		{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.33.0"},
+		{ImportPath: "golang.org/x/tools/cmd/stringer", Version: "v0.0.0-20201211185031-d93e913c1a58"},
+		{ImportPath: "example.org/z/random/stringer/v2/cmd/stringer", Version: "v2.1.0"},
+		{ImportPath: "github.com/Shopify/ejson/cmd/ejson", Version: "v1.2.0"},
+	})
 
 	tests := []struct {
 		name string
@@ -158,6 +212,10 @@ func TestLockfileDelete(t *testing.T) {
 			name: "does not exist in bucket",
 			tool: tool.Tool{ImportPath: "golang.org/x/tools/cmd/golangci-lint", Version: "v0.0.1"},
 		},
+		{
+			name: "version not specified",
+			tool: tool.Tool{ImportPath: "github.com/Shopify/ejson/cmd/ejson"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -173,11 +231,12 @@ func TestLockfileDelete(t *testing.T) {
 }
 
 func TestLockfileIter(t *testing.T) {
-	lf := &lockfile.Lockfile{}
-	lf.PutTool(tool.Tool{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"})
-	lf.PutTool(tool.Tool{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.33.0"})
-	lf.PutTool(tool.Tool{ImportPath: "golang.org/x/tools/cmd/stringer", Version: "v0.0.0-20201211185031-d93e913c1a58"})
-	lf.PutTool(tool.Tool{ImportPath: "example.org/z/random/stringer/v2/cmd/stringer", Version: "v2.1.0"})
+	lf := newLockfile(t, []tool.Tool{
+		{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"},
+		{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.33.0"},
+		{ImportPath: "golang.org/x/tools/cmd/stringer", Version: "v0.0.0-20201211185031-d93e913c1a58"},
+		{ImportPath: "example.org/z/random/stringer/v2/cmd/stringer", Version: "v2.1.0"},
+	})
 
 	want := []string{
 		"example.org/z/random/stringer/v2/cmd/stringer",
@@ -200,11 +259,12 @@ func TestLockfileIter(t *testing.T) {
 }
 
 func TestLockfileWriteTo(t *testing.T) {
-	lf := &lockfile.Lockfile{}
-	lf.PutTool(tool.Tool{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"})
-	lf.PutTool(tool.Tool{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.33.0"})
-	lf.PutTool(tool.Tool{ImportPath: "golang.org/x/tools/cmd/stringer", Version: "v0.0.0-20201211185031-d93e913c1a58"})
-	lf.PutTool(tool.Tool{ImportPath: "example.org/z/random/stringer/v2/cmd/stringer", Version: "v2.1.0"})
+	lf := newLockfile(t, []tool.Tool{
+		{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"},
+		{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.33.0"},
+		{ImportPath: "golang.org/x/tools/cmd/stringer", Version: "v0.0.0-20201211185031-d93e913c1a58"},
+		{ImportPath: "example.org/z/random/stringer/v2/cmd/stringer", Version: "v2.1.0"},
+	})
 
 	buf := &bytes.Buffer{}
 	n, err := lf.WriteTo(buf)
