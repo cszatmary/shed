@@ -130,7 +130,9 @@ var availableTools = map[string]map[string]string{
 func createLockfile(t *testing.T, path string, tools []tool.Tool) {
 	lf := &lockfile.Lockfile{}
 	for _, tl := range tools {
-		lf.PutTool(tl)
+		if err := lf.PutTool(tl); err != nil {
+			t.Fatalf("failed to add tool %v to lockfile: %v", tl, err)
+		}
 	}
 
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
@@ -228,6 +230,23 @@ func TestInstall(t *testing.T) {
 				{ImportPath: "github.com/Shopify/ejson/cmd/ejson", Version: "v1.1.0"},
 			},
 		},
+		{
+			name: "remove tool",
+			lockfileTools: []tool.Tool{
+				{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"},
+				{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.28.3"},
+				{ImportPath: "github.com/Shopify/ejson/cmd/ejson", Version: "v1.1.0"},
+			},
+			installTools: []string{
+				"github.com/golangci/golangci-lint/cmd/golangci-lint@none",
+				"golang.org/x/tools/cmd/stringer@none",
+			},
+			wantLen: 4,
+			wantTools: []tool.Tool{
+				{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"},
+				{ImportPath: "github.com/Shopify/ejson/cmd/ejson", Version: "v1.1.0"},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -265,10 +284,21 @@ func TestInstall(t *testing.T) {
 			}
 
 			lf := readLockfile(t, lockfilePath)
+			installedTools := make(map[string]tool.Tool)
+			it := lf.Iter()
+			for it.Next() {
+				tl := it.Value()
+				installedTools[tl.ImportPath] = tl
+			}
+			if len(installedTools) != len(tt.wantTools) {
+				t.Errorf("got %d tools in lockfile, want %d", len(installedTools), len(tt.wantTools))
+			}
+
 			for _, wantTool := range tt.wantTools {
-				tl, err := lf.GetTool(wantTool.ImportPath)
-				if err != nil {
-					t.Errorf("want nil error, got %v", err)
+				tl, ok := installedTools[wantTool.ImportPath]
+				if !ok {
+					t.Errorf("tool %v does not exist in lockfile", tl)
+					continue
 				}
 				if tl != wantTool {
 					t.Errorf("got %+v, want %+v", tl, wantTool)
