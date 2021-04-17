@@ -18,6 +18,9 @@ import (
 
 const LockfileName = "shed.lock"
 
+// noneVersion is a special module version that signifies the module should be removed.
+const noneVersion = "none"
+
 // ResolveLockfilePath resolves the path to the nearest shed lockfile starting at dir.
 // It will keep searching parent directories until either a lockfile is found,
 // or the root directory is reached. If no lockfile is found, an empty string will be returned.
@@ -214,6 +217,15 @@ func (is *InstallSet) Apply(ctx context.Context) error {
 	failedCh := make(chan error)
 	for _, tl := range is.tools {
 		go func(t tool.Tool) {
+			// go get supports the special version suffix '@none' which means remove the module.
+			// See https://golang.org/ref/mod#go-get for more details.
+			// Support this for consistency since we want to shed to just work with all module queries.
+			if t.Version == noneVersion {
+				is.s.logger.Debugf("Uninstalling tool: %s", t.ImportPath)
+				successCh <- t
+				return
+			}
+
 			is.s.logger.Debugf("Installing tool: %v", t)
 			installed, err := is.s.cache.Install(ctx, t)
 			if err != nil {
@@ -224,12 +236,12 @@ func (is *InstallSet) Apply(ctx context.Context) error {
 		}(tl)
 	}
 
-	var installedTools []tool.Tool
+	var completedTools []tool.Tool
 	var errs lockfile.ErrorList
 	for i := 0; i < len(is.tools); i++ {
 		select {
 		case t := <-successCh:
-			installedTools = append(installedTools, t)
+			completedTools = append(completedTools, t)
 			if is.notifyCh != nil {
 				is.notifyCh <- t
 			}
@@ -245,8 +257,18 @@ func (is *InstallSet) Apply(ctx context.Context) error {
 		return errs
 	}
 
-	for _, t := range installedTools {
-		is.s.lf.PutTool(t)
+	for _, t := range completedTools {
+		if t.Version == noneVersion {
+			// Uninstall the tool by removing it from the lockfile.
+			// Unlike Uninstall() this will not error if the tool is not in the lockfile,
+			// instead it will be silently ignored.
+			t.Version = ""
+			is.s.lf.DeleteTool(t)
+			continue
+		}
+		if err := is.s.lf.PutTool(t); err != nil {
+			return errors.Wrapf(err, "failed to add tool %v to lockfile", t)
+		}
 	}
 	if err := is.s.writeLockfile(); err != nil {
 		return err
