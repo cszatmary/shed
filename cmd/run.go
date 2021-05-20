@@ -18,16 +18,18 @@ var runCmd = &cobra.Command{
 	Long: `shed run runs an installed tool passing all arguments to it.
 
 The tool name can either be the full import path or the binary name if it is unique.
-In order to pass flags to the tool, you must preceed them with '--'. This signifies to
-shed that these flags are meant to be treated as arguments for the tool, and not flags for shed.
+All arguments after the tool name will be passed to the tool as is, even if they are flags.
+That is, 'shed run --verbose foo' is treated differently than 'shed run foo --verbose'.
+The first treats the '--verbose' flag as belonging to shed, the second treats it as belonging
+to the 'foo' tool.
 
 For example to run the stringer tool you can either run:
 
-	shed run stringer -- -type=Pill
+	shed run stringer -type=Pill
 
 Or:
 
-	shed run golang.org/x/tools/cmd/stringer -- -type=Pill`,
+	shed run golang.org/x/tools/cmd/stringer -type=Pill`,
 	Run: func(cmd *cobra.Command, args []string) {
 		toolName := args[0]
 		logger := newLogger()
@@ -62,5 +64,8 @@ Or:
 }
 
 func init() {
+	// Stop parsing flags after first non-flag arg
+	// so we can pass them to the command being run
+	runCmd.Flags().SetInterspersed(false)
 	rootCmd.AddCommand(runCmd)
 }
