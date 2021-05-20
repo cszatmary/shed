@@ -66,11 +66,11 @@ Or
 shed run github.com/golangci/golangci-lint/cmd/golangci-lint run
 ```
 
-All additional arguments are passed to the tool being run. If you wish to pass flags to the tool, you must
-put `--` before any flags to indicate that the flags are for the tool and not shed itself.
+All additional arguments are passed to the tool being run. Any flags after the tool name are passed to the
+tool directly and are not parsed by shed.
 
 ```
-shed run stringer -- -type=Pill
+shed run stringer -type=Pill
 ```
 
 ## `shed.lock`

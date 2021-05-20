@@ -2,8 +2,12 @@
 SHED = go run main.go
 COVERPKGS = ./cache,./client,./internal/spinner,./internal/util,./lockfile,./tool
 
-# Get all dependencies
-setup:
+# Absolutely awesome: http://marmelab.com/blog/2016/02/29/auto-documented-makefile.html
+help:
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
+.PHONY: help
+
+setup: ## Install all dependencies
 	@echo Installing dependencies
 	@go mod tidy
 # Self-hoisted!
@@ -12,67 +16,59 @@ setup:
 	@$(SHED) run go-fish install
 .PHONY: setup
 
-build:
+build: ## Build shed
 	@go build
 .PHONY: build
 
-build-snapshot:
-	@$(SHED) run goreleaser build -- --snapshot --rm-dist
+build-snapshot: ## Create a snapshot release build
+	@$(SHED) run goreleaser build --snapshot --rm-dist
 .PHONY: build-snapshot
 
-release:
+release: ## Create a new release of shed
 	$(if $(version),,$(error version variable is not set))
 	git tag -a v$(version) -m "v$(version)"
 	git push origin v$(version)
-	$(SHED) run goreleaser release -- --rm-dist
+	$(SHED) run goreleaser release --rm-dist
 .PHONY: release
 
-# Generate shell completions for distribution
-completions:
+completions: ## Generate shell completions for distribution
 	@mkdir -p completions
 	@$(SHED) completions bash > completions/shed.bash
 	@$(SHED) completions zsh > completions/_shed
 .PHONY: completions
 
-# Clean all build artifacts
-clean:
+clean: ## Clean all build artifacts
 	@rm -rf completions
 	@rm -rf coverage
 	@rm -rf dist
 	@rm -f shed
 .PHONY: clean
 
-fmt:
-	@$(SHED) run goimports -- -w .
+fmt: ## Format all go files
+	@$(SHED) run goimports -w .
 .PHONY: fmt
 
-check-fmt:
+check-fmt: ## Check if any go files need to be formatted
 	@./scripts/check_fmt.sh
 .PHONY: check-fmt
 
-lint:
+lint: ## Lint go files
 	@$(SHED) run golangci-lint run ./...
 .PHONY: lint
 
-# Remove version installed with go install
-go-uninstall:
+go-uninstall: ## Remove version installed with go install
 	@rm $(shell go env GOPATH)/bin/shed
 .PHONY: go-uninstall
 
 # Run tests and collect coverage data
-test:
+test: ## Run all tests
 	@mkdir -p coverage
 	@go test -coverpkg=$(COVERPKGS) -coverprofile=coverage/coverage.txt ./...
-	@go tool cover -html=coverage/coverage.txt -o coverage/coverage.html
 .PHONY: test
 
-# Run tests and print coverage data to stdout
-test-ci:
-	@mkdir -p coverage
-	@go test -coverpkg=$(COVERPKGS) -coverprofile=coverage/coverage.txt ./...
-	@go tool cover -func=coverage/coverage.txt
-.PHONY: test-ci
+cover: test ## Run all tests and generate coverage data
+	@go tool cover -html=coverage/coverage.txt -o coverage/coverage.html
+.PHONY: cover
 
-# Generate install script to download binaries
-scripts/install.sh: .goreleaser.yml
+scripts/install.sh: .goreleaser.yml ## Generate install script to download binaries
 	@$(SHED) run godownloader .goreleaser.yml > $@
