@@ -6,10 +6,8 @@ shed() {
     go run main.go "$@"
 }
 
-if [ "$(shed run goimports -- -l . | wc -l)" -gt 0 ]; then
-    echo "Unformatted files found:"
-    # Run again to print files. Couldn't figure out a way to
-    # save the output and make it work with wc.
-    shed run goimports -- -l .
+files="$(shed run goimports -l .)"
+if [ -n "$files" ]; then
+    printf "Unformatted files found:\n%s\n" "$files"
     exit 1
 fi

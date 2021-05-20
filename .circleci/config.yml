@@ -41,7 +41,7 @@ jobs:
           command: make build-snapshot
       - run:
           name: Run tests
-          command: make test-ci
+          command: make test
 
 workflows:
   lint-build-test:
