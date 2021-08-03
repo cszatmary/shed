@@ -143,17 +143,17 @@ func (s *Shed) writeLockfile() error {
 	return nil
 }
 
-// Install computes a set of tools that should be installed. It can be given zero or
+// Get computes a set of tools that should be installed. It can be given zero or
 // more tools as arguments. These will be unioned with the tools in the lockfile
-// to produce a final set of tools to install. Install will return an InstallSet instance
+// to produce a final set of tools to install. Get will return an InstallSet instance
 // which can be used to perform the actual installation.
 //
-// Install does not modify any state, therefore, if you wish to abort the install simply
+// Get does not modify any state, therefore, if you wish to abort the install simply
 // discard the returned InstallSet.
 //
 // All tool names provided must be full import paths, not binary names.
-// If a tool name is invalid, Install will return an error.
-func (s *Shed) Install(toolNames ...string) (*InstallSet, error) {
+// If a tool name is invalid, Get will return an error.
+func (s *Shed) Get(toolNames ...string) (*InstallSet, error) {
 	// Collect all the tools that need to be installed.
 	// Merge the given tools with what exists in the lockfile.
 	seenTools := make(map[string]bool)

@@ -12,7 +12,7 @@ setup: ## Install all dependencies
 	@go mod tidy
 # Self-hoisted!
 	@echo Installing tool dependencies
-	@$(SHED) install
+	@$(SHED) get
 	@$(SHED) run go-fish install
 .PHONY: setup
 
