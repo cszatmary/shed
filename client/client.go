@@ -276,35 +276,6 @@ func (is *InstallSet) Apply(ctx context.Context) error {
 	return nil
 }
 
-// Uninstall uninstalls the given tools. This only removes them from the lockfile.
-// The actual tool binaries are not removed, since they might be used by other projects.
-// To remove the actual binaries, use CleanCache.
-func (s *Shed) Uninstall(toolNames ...string) error {
-	var tools []tool.Tool
-	var errs lockfile.ErrorList
-	for _, toolName := range toolNames {
-		t, err := s.lf.GetTool(toolName)
-		if err != nil {
-			errs = append(errs, err)
-			continue
-		}
-		tools = append(tools, t)
-	}
-	if len(errs) > 0 {
-		return errs
-	}
-
-	for _, t := range tools {
-		s.logger.Debugf("Uninstalling tool: %v", t)
-		s.lf.DeleteTool(t)
-	}
-
-	if err := s.writeLockfile(); err != nil {
-		return err
-	}
-	return nil
-}
-
 // ToolPath returns the absolute path to the binary of the tool if it is installed.
 // If the tool cannot be found, or toolName is invalid, an error will be returned.
 func (s *Shed) ToolPath(toolName string) (string, error) {

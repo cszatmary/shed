@@ -22,8 +22,10 @@ or create a new shed.lock if one does not exist. The shed.lock file is responsib
 what tools are installed and their verion. This allows shed to always reinstall the same tools.
 
 Each tool provided must be the full import path to the package containing the main executable.
-The format is identical to what would be passed to 'go get'. Tools may specify a version by prefixing it with
+The format is identical to what would be passed to 'go get'. Tools may specify a version by suffixing it with
 an '@', just like with 'go get' in module-aware mode. If no version is provided, the latest version will be installed.
+
+Tools can be uninstalled by using the special '@none' version suffix.
 
 If no tools are provided, then shed will simply install all tools in the lockfile.
 
@@ -39,7 +41,11 @@ Install a specific version of a tool:
 
 Install all tools specified in shed.lock:
 
-	shed install`,
+	shed install
+
+Uninstall a tool:
+
+	shed install golang.org/x/tools/cmd/stringer@none`,
 	Run: func(cmd *cobra.Command, args []string) {
 		logger := newLogger()
 		setwd(logger)
