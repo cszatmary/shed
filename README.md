@@ -34,19 +34,25 @@ go get github.com/getshiphub/shed
 shed uses the import path with an optional version to install tools, just like `go get` in module mode.
 
 ```
-shed install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.33.0
+shed get github.com/golangci/golangci-lint/cmd/golangci-lint@v1.33.0
 ```
 
 If the version is omitted, the latest version will be installed.
 
 ```
-shed install github.com/golangci/golangci-lint/cmd/golangci-lint
+shed get github.com/golangci/golangci-lint/cmd/golangci-lint
 ```
 
 If no arguments are provided, shed will install all tools in the `shed.lock` file.
 
 ```
-shed install
+shed get
+```
+
+To uninstall a tool use the special `@none` version suffix.
+
+```
+shed get github.com/golangci/golangci-lint/cmd/golangci-lint@none
 ```
 
 ### Running tools

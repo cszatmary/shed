@@ -12,11 +12,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var installCmd = &cobra.Command{
-	Use:   "install [tools...]",
+var getCmd = &cobra.Command{
+	Use:   "get [tools...]",
 	Args:  cobra.ArbitraryArgs,
 	Short: "Install Go tools.",
-	Long: `shed install installs the given tools plus all tools specified in a shed.lock file.
+	Long: `shed get installs the given tools plus all tools specified in a shed.lock file.
 After installing the tools, shed will either update the existing shed.lock file in the current directory,
 or create a new shed.lock if one does not exist. The shed.lock file is responsible for keeping track of
 what tools are installed and their verion. This allows shed to always reinstall the same tools.
@@ -33,24 +33,24 @@ Examples:
 
 Install the latest version of a tool:
 
-	shed install golang.org/x/tools/cmd/stringer
+	shed get golang.org/x/tools/cmd/stringer
 
 Install a specific version of a tool:
 
-	shed install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.33.0
+	shed get github.com/golangci/golangci-lint/cmd/golangci-lint@v1.33.0
 
 Install all tools specified in shed.lock:
 
-	shed install
+	shed get
 
 Uninstall a tool:
 
-	shed install golang.org/x/tools/cmd/stringer@none`,
+	shed get golang.org/x/tools/cmd/stringer@none`,
 	Run: func(cmd *cobra.Command, args []string) {
 		logger := newLogger()
 		setwd(logger)
 		shed := mustShed(client.WithLogger(logger))
-		installSet, err := shed.Install(args...)
+		installSet, err := shed.Get(args...)
 		if err != nil {
 			fatal.ExitErrf(err, "Failed to determine list of tools to install")
 		}
@@ -97,5 +97,5 @@ Uninstall a tool:
 }
 
 func init() {
-	rootCmd.AddCommand(installCmd)
+	rootCmd.AddCommand(getCmd)
 }

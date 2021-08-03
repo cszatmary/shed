@@ -14,11 +14,11 @@ var initCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	Short: "Generate a lockfile in the current directory.",
 	Long: `shed init initializes shed in the current directory by creating a lockfile.
-In most cases this isn't necessary as shed will automatically create a lockfile when shed install is run.
+In most cases this isn't necessary as shed will automatically create a lockfile when shed get is run.
 
 In some situations however, it may be desirable to explicitly create the lockfile. One reason for this is to
 setup shed in a subdirectory of a project. shed will automatically check parent directories for lockfiles.
-If you wish to have shed install update a lockfile in a subdirectory instead of a parent directory,
+If you wish to have shed get update a lockfile in a subdirectory instead of a parent directory,
 you can use shed init to create a new lockfile.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		logger := newLogger()

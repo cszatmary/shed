@@ -159,7 +159,7 @@ func readLockfile(t *testing.T, path string) *lockfile.Lockfile {
 	return lf
 }
 
-func TestInstall(t *testing.T) {
+func TestGet(t *testing.T) {
 	tests := []struct {
 		name          string
 		lockfileTools []tool.Tool
@@ -270,7 +270,7 @@ func TestInstall(t *testing.T) {
 				t.Fatalf("failed to create shed client %v", err)
 			}
 
-			installSet, err := s.Install(tt.installTools...)
+			installSet, err := s.Get(tt.installTools...)
 			if err != nil {
 				t.Errorf("want nil error, got %v", err)
 			}
@@ -312,7 +312,7 @@ func TestInstall(t *testing.T) {
 	}
 }
 
-func TestInstallError(t *testing.T) {
+func TestGetError(t *testing.T) {
 	td := t.TempDir()
 	lockfilePath := filepath.Join(td, "shed.lock")
 	mockGo, err := cache.NewMockGo(availableTools)
@@ -331,7 +331,7 @@ func TestInstallError(t *testing.T) {
 		t.Fatalf("failed to create shed client %v", err)
 	}
 
-	_, err = s.Install(
+	_, err = s.Get(
 		"github.com/cszatmary/go-fish",
 		"golangci-lint",
 		"github.com/Shopify/ejson/cmd/ejson@v1.2.2",
@@ -416,7 +416,7 @@ func TestList(t *testing.T) {
 
 			// Install tools, otherwise List might error
 			ctx := context.Background()
-			installSet, err := s.Install()
+			installSet, err := s.Get()
 			if err != nil {
 				t.Fatalf("failed to install tools %v", err)
 			}

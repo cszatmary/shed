@@ -37,7 +37,7 @@ Or:
 		shed := mustShed(client.WithLogger(logger))
 		binPath, err := shed.ToolPath(toolName)
 		if errors.Is(err, lockfile.ErrNotFound) {
-			fatal.Exitf("No tool named %s installed. Run 'shed install' first to install the tool.", toolName)
+			fatal.Exitf("No tool named %s installed. Run 'shed get' first to install the tool.", toolName)
 		} else if errors.Is(err, lockfile.ErrMultipleTools) {
 			fatal.Exitf("Multiple tools named %s found. Specify the full import path of the tool in order to run it.", toolName)
 		} else if err != nil {
