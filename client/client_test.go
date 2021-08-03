@@ -393,24 +393,90 @@ func TestUninstall(t *testing.T) {
 }
 
 func TestList(t *testing.T) {
-	td := t.TempDir()
-	lockfilePath := filepath.Join(td, "shed.lock")
-	wantTools := []tool.Tool{
-		{ImportPath: "github.com/Shopify/ejson/cmd/ejson", Version: "v1.2.2"},
-		{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"},
-		{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.33.0"},
-	}
-	createLockfile(t, lockfilePath, wantTools)
-	s, err := client.NewShed(
-		client.WithLockfilePath(lockfilePath),
-		client.WithCache(cache.New(td)),
-	)
-	if err != nil {
-		t.Fatalf("failed to create shed client %v", err)
+	tests := []struct {
+		name          string
+		lockfileTools []tool.Tool
+		opts          client.ListOptions
+		wantTools     []client.ToolInfo
+	}{
+		{
+			name: "list tools",
+			lockfileTools: []tool.Tool{
+				{ImportPath: "github.com/Shopify/ejson/cmd/ejson", Version: "v1.2.2"},
+				{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"},
+				{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.33.0"},
+			},
+			wantTools: []client.ToolInfo{
+				{
+					Tool: tool.Tool{ImportPath: "github.com/Shopify/ejson/cmd/ejson", Version: "v1.2.2"},
+				},
+				{
+					Tool: tool.Tool{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"},
+				},
+				{
+					Tool: tool.Tool{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.33.0"},
+				},
+			},
+		},
+		{
+			name: "list tools with updates",
+			lockfileTools: []tool.Tool{
+				{ImportPath: "github.com/Shopify/ejson/cmd/ejson", Version: "v1.1.0"},
+				{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"},
+				{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.28.3"},
+			},
+			opts: client.ListOptions{ShowUpdates: true},
+			wantTools: []client.ToolInfo{
+				{
+					Tool:          tool.Tool{ImportPath: "github.com/Shopify/ejson/cmd/ejson", Version: "v1.1.0"},
+					LatestVersion: "v1.2.2",
+				},
+				{
+					Tool: tool.Tool{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"},
+				},
+				{
+					Tool:          tool.Tool{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.28.3"},
+					LatestVersion: "v1.33.0",
+				},
+			},
+		},
 	}
 
-	got := s.List()
-	if !reflect.DeepEqual(got, wantTools) {
-		t.Errorf("got tools %+v, want %+v", got, wantTools)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			td := t.TempDir()
+			lockfilePath := filepath.Join(td, "shed.lock")
+			mockGo, err := cache.NewMockGo(availableTools)
+			if err != nil {
+				t.Fatalf("failed to create mock go %v", err)
+			}
+
+			createLockfile(t, lockfilePath, tt.lockfileTools)
+			s, err := client.NewShed(
+				client.WithLockfilePath(lockfilePath),
+				client.WithCache(cache.New(td, cache.WithGo(mockGo))),
+			)
+			if err != nil {
+				t.Fatalf("failed to create shed client %v", err)
+			}
+
+			// Install tools, otherwise List might error
+			ctx := context.Background()
+			installSet, err := s.Install()
+			if err != nil {
+				t.Fatalf("failed to install tools %v", err)
+			}
+			if err := installSet.Apply(ctx); err != nil {
+				t.Fatalf("failed to install tools %v", err)
+			}
+
+			got, err := s.List(ctx, tt.opts)
+			if err != nil {
+				t.Errorf("want nil error, got %v", err)
+			}
+			if !reflect.DeepEqual(got, tt.wantTools) {
+				t.Errorf("got tools %+v, want %+v", got, tt.wantTools)
+			}
+		})
 	}
 }

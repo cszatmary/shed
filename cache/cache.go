@@ -6,7 +6,7 @@ package cache
 
 import (
 	"context"
-	"io/ioutil"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +17,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/mod/modfile"
 )
+
+var ErrToolNotInstalled = errors.New("cache: tool not installed")
 
 // Cache manages tools in an OS filesystem directory.
 type Cache struct {
@@ -42,7 +44,7 @@ func New(dir string, opts ...Option) *Cache {
 		// Logging is disabled by default, but we don't want to have to check
 		// for nil all the time, so create a logger that logs to nowhere
 		logger := logrus.New()
-		logger.Out = ioutil.Discard
+		logger.Out = io.Discard
 		c.logger = logger
 	}
 	return c
@@ -170,7 +172,7 @@ func (c *Cache) download(ctx context.Context, t tool.Tool) (tool.Tool, error) {
 	if t.HasSemver() {
 		if util.FileOrDirExists(modfilePath) {
 			// If go.mod already exists, make sure there's no issues with it
-			data, err := ioutil.ReadFile(modfilePath)
+			data, err := os.ReadFile(modfilePath)
 			if err != nil {
 				return t, errors.Wrapf(err, "failed to read file %q", modfilePath)
 			}
@@ -280,7 +282,7 @@ func (c *Cache) download(ctx context.Context, t tool.Tool) (tool.Tool, error) {
 	}
 
 	// Need to read go.mod file so we can figure out what version was installed
-	data, err := ioutil.ReadFile(modfilePath)
+	data, err := os.ReadFile(modfilePath)
 	if err != nil {
 		return t, errors.Wrapf(err, "failed to read file %q", modfilePath)
 	}
@@ -325,15 +327,62 @@ func (c *Cache) download(ctx context.Context, t tool.Tool) (tool.Tool, error) {
 // ToolPath returns the absolute path the the installed binary for the given tool.
 // If the binary cannot be found, an error is returned.
 func (c *Cache) ToolPath(t tool.Tool) (string, error) {
-	baseDir := c.toolsDir()
 	bfp, err := t.BinaryFilepath()
 	if err != nil {
 		return "", err
 	}
 
-	binPath := filepath.Join(baseDir, bfp)
+	binPath := filepath.Join(c.toolsDir(), bfp)
 	if !util.FileOrDirExists(binPath) {
-		return "", errors.Errorf("binary for tool %s does not exist", t)
+		return "", errors.Wrapf(ErrToolNotInstalled, "binary for tool %s does not exist", t)
 	}
 	return binPath, nil
+}
+
+// FindUpdate checks if there is a newer version available for tool t.
+// If no newer version is found, an empty string is returned.
+func (c *Cache) FindUpdate(ctx context.Context, t tool.Tool) (string, error) {
+	fp, err := t.Filepath()
+	if err != nil {
+		return "", err
+	}
+
+	c.logger.WithFields(logrus.Fields{
+		"tool": t,
+	}).Debug("finding module that tool belongs to")
+	dir := filepath.Join(c.toolsDir(), fp)
+	modfilePath := filepath.Join(dir, "go.mod")
+	data, err := os.ReadFile(modfilePath)
+	if os.IsNotExist(err) {
+		return "", errors.Wrapf(ErrToolNotInstalled, "tool %s does not exist", t)
+	} else if err != nil {
+		return "", errors.Wrapf(err, "failed to read %s", modfilePath)
+	}
+
+	modFile, err := modfile.Parse(modfilePath, data, nil)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to parse go.mod file %s", modfilePath)
+	}
+	// Check some invariants just to be safe
+	// TODO(@cszatmary): Need an error that represents a bad modfile, can alert users to run 'shed install' to fix
+	if len(modFile.Require) != 1 {
+		return "", errors.Errorf("expected 1 dependency in modfile at %s but found %d", dir, len(modFile.Require))
+	}
+	m := modFile.Require[0].Mod
+	if !strings.HasPrefix(t.ImportPath, m.Path) {
+		return "", errors.Errorf("unexpected module %s in modfile for tool %s", m, t)
+	}
+
+	c.logger.WithFields(logrus.Fields{
+		"tool":   t,
+		"module": m,
+	}).Debug("finding latest version of tool")
+	gm, err := c.goClient.ListU(ctx, m.Path, dir)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to list module update for %s", m.Path)
+	}
+	if gm.Update == nil {
+		return "", nil
+	}
+	return gm.Update.Version, nil
 }

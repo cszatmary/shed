@@ -3,7 +3,7 @@ package client
 
 import (
 	"context"
-	"io/ioutil"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -67,7 +67,7 @@ func NewShed(opts ...Option) (*Shed, error) {
 		// Logging is disabled by default, but we don't want to have to check
 		// for nil all the time, so create a logger that logs to nowhere
 		logger := logrus.New()
-		logger.Out = ioutil.Discard
+		logger.Out = io.Discard
 		s.logger = logger
 	}
 	if s.cache == nil {
@@ -315,15 +315,40 @@ func (s *Shed) ToolPath(toolName string) (string, error) {
 	return s.cache.ToolPath(t)
 }
 
+// ListOptions is used to configure Shed.List.
+type ListOptions struct {
+	// ShowUpdates makes List check if a newer version of each tool is available.
+	ShowUpdates bool
+}
+
+// ToolInfo contains information about a tool returned by Shed.List.
+type ToolInfo struct {
+	// Tool contains the details of the installed tool.
+	Tool tool.Tool
+	// LatestVersion specifies the latest version of the tool
+	// if ShowUpdates was set to true and a newer version was found.
+	// Otherwise it is an empty string.
+	LatestVersion string
+}
+
 // List returns a list of all the tools specified in the lockfile.
-func (s *Shed) List() []tool.Tool {
-	var tools []tool.Tool
+// opts can be used to customize how List behaves.
+func (s *Shed) List(ctx context.Context, opts ListOptions) ([]ToolInfo, error) {
+	var tools []ToolInfo
 	it := s.lf.Iter()
 	for it.Next() {
-		tools = append(tools, it.Value())
+		info := ToolInfo{Tool: it.Value()}
+		if opts.ShowUpdates {
+			latest, err := s.cache.FindUpdate(ctx, info.Tool)
+			if err != nil {
+				return nil, err
+			}
+			info.LatestVersion = latest
+		}
+		tools = append(tools, info)
 	}
 	sort.Slice(tools, func(i, j int) bool {
-		return tools[i].ImportPath < tools[j].ImportPath
+		return tools[i].Tool.ImportPath < tools[j].Tool.ImportPath
 	})
-	return tools
+	return tools, nil
 }
