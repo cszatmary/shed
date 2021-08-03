@@ -2,7 +2,6 @@ package client_test
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -344,51 +343,6 @@ func TestInstallError(t *testing.T) {
 	wantLen := 1
 	if len(errList) != wantLen {
 		t.Errorf("got %d errors, want %d", len(errList), wantLen)
-	}
-}
-
-func TestUninstall(t *testing.T) {
-	td := t.TempDir()
-	lockfilePath := filepath.Join(td, "shed.lock")
-	createLockfile(t, lockfilePath, []tool.Tool{
-		{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"},
-		{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.33.0"},
-		{ImportPath: "github.com/Shopify/ejson/cmd/ejson", Version: "v1.2.2"},
-	})
-	s, err := client.NewShed(
-		client.WithLockfilePath(lockfilePath),
-		client.WithCache(cache.New(td)),
-	)
-	if err != nil {
-		t.Fatalf("failed to create shed client %v", err)
-	}
-
-	uninstallTools := []string{"go-fish", "golangci-lint"}
-	err = s.Uninstall(uninstallTools...)
-	if err != nil {
-		t.Errorf("want nil error, got %v", err)
-	}
-
-	lf := readLockfile(t, lockfilePath)
-	for _, tn := range uninstallTools {
-		_, err := lf.GetTool(tn)
-		if !errors.Is(err, lockfile.ErrNotFound) {
-			t.Errorf("want ErrNotFound, got %v", err)
-		}
-		// ToolPath will return an error if the binary does not exist
-		_, err = s.ToolPath(tn)
-		if err == nil {
-			t.Error("want non-nil error, got nil")
-		}
-	}
-
-	tl, err := lf.GetTool("ejson")
-	if err != nil {
-		t.Errorf("want nil error, got %v", err)
-	}
-	wantTool := tool.Tool{ImportPath: "github.com/Shopify/ejson/cmd/ejson", Version: "v1.2.2"}
-	if tl != wantTool {
-		t.Errorf("got %+v, want %+v", tl, wantTool)
 	}
 }
 
