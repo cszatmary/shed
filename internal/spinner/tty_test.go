@@ -9,9 +9,12 @@ import (
 
 func TestTTYSpinner(t *testing.T) {
 	out := &syncBuffer{}
-	s := spinner.NewTTY(spinner.Options{
-		Out:     out,
-		Message: "Cloning repos",
+	s := spinner.NewTTY(spinner.TTYOptions{
+		Options: spinner.Options{
+			Out:     out,
+			Message: "Cloning repos",
+		},
+		IsaTTY: false,
 	})
 	s.Start()
 	s.UpdateMessage("Updating repos")

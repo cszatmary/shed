@@ -189,6 +189,8 @@ func (c *Cache) download(ctx context.Context, t tool.Tool) (tool.Tool, error) {
 				c.logger.Debugf("expected 1 required statement in go.mod, found %d", len(modFile.Require))
 			}
 
+			// TODO(@cszatmary): This blows up if the modfile has 0 require statements, fix this ASAP
+			// Also try to simplify some of the logic in this function if possible
 			mod := modFile.Require[0].Mod
 			// Use contains since actual module could have less then what we are installing
 			// Ex: golang.org/x/tools vs golang.org/x/tools/cmd/stringer

@@ -27,7 +27,11 @@ You can also install shed using `go get`:
 go get github.com/getshiphub/shed
 ```
 
+Note: Installing from source requires a minimum Go version of 1.16.
+
 ## Usage
+
+shed requires a minimum Go version of `1.11` to be installed. This is because it builds tools from source using Go modules.
 
 ### Installing tools
 
