@@ -1,22 +1,19 @@
 package cmd
 
 import (
-	"context"
-	"errors"
-	"os"
-	"os/signal"
+	"fmt"
 
-	"github.com/getshiphub/shed/client"
 	"github.com/getshiphub/shed/internal/spinner"
 	"github.com/getshiphub/shed/tool"
 	"github.com/spf13/cobra"
 )
 
-var getCmd = &cobra.Command{
-	Use:   "get [tools...]",
-	Args:  cobra.ArbitraryArgs,
-	Short: "Install Go tools.",
-	Long: `shed get installs the given tools plus all tools specified in a shed.lock file.
+func newGetCommand(c *container) *cobra.Command {
+	return &cobra.Command{
+		Use:   "get [tools...]",
+		Args:  cobra.ArbitraryArgs,
+		Short: "Install Go tools.",
+		Long: `shed get installs the given tools plus all tools specified in a shed.lock file.
 After installing the tools, shed will either update the existing shed.lock file in the current directory,
 or create a new shed.lock if one does not exist. The shed.lock file is responsible for keeping track of
 what tools are installed and their verion. This allows shed to always reinstall the same tools.
@@ -46,56 +43,42 @@ Install all tools specified in shed.lock:
 Uninstall a tool:
 
 	shed get golang.org/x/tools/cmd/stringer@none`,
-	Run: func(cmd *cobra.Command, args []string) {
-		logger := newLogger()
-		setwd(logger)
-		shed := mustShed(client.WithLogger(logger))
-		installSet, err := shed.Get(args...)
-		if err != nil {
-			fatal.ExitErrf(err, "Failed to determine list of tools to install")
-		}
-
-		s := spinner.NewTTY(spinner.Options{
-			Message:         "Installing tools",
-			Count:           installSet.Len(),
-			PersistMessages: rootOpts.verbose,
-		})
-		logger.Out = s
-		ch := make(chan tool.Tool, installSet.Len())
-		installSet.Notify(ch)
-		go func() {
-			for range ch {
-				s.Inc()
+		RunE: func(cmd *cobra.Command, args []string) error {
+			installSet, err := c.shed.Get(args...)
+			if err != nil {
+				return fmt.Errorf("unable to determine list of tools to install: %w", err)
 			}
-		}()
 
-		// Listen of SIGINT to do a graceful abort
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		abort := make(chan os.Signal, 1)
-		signal.Notify(abort, os.Interrupt)
-		go func() {
-			<-abort
-			cancel()
-		}()
+			s := spinner.NewTTY(spinner.TTYOptions{
+				Options: spinner.Options{
+					Message:         "Installing tools",
+					Count:           installSet.Len(),
+					PersistMessages: c.opts.verbose,
+				},
+				IsaTTY: c.isaTTY,
+			})
+			prevOut := c.logger.Out
+			c.logger.Out = s
 
-		s.Start()
-		err = installSet.Apply(ctx)
-		s.Stop()
-		close(ch)
-		logger.Out = os.Stderr
+			ch := make(chan tool.Tool, installSet.Len())
+			installSet.Notify(ch)
+			go func() {
+				for range ch {
+					s.Inc()
+				}
+			}()
 
-		if errors.Is(err, context.Canceled) {
-			logger.Info("Install aborted")
-			return
-		}
-		if err != nil {
-			fatal.ExitErrf(err, "Failed to install tools")
-		}
-		logger.Info("Finished installing tools")
-	},
-}
+			s.Start()
+			err = installSet.Apply(cmd.Context())
+			s.Stop()
+			close(ch)
+			c.logger.Out = prevOut
 
-func init() {
-	rootCmd.AddCommand(getCmd)
+			if err != nil {
+				return fmt.Errorf("failed to install tools: %w", err)
+			}
+			c.logger.Info("Finished installing tools")
+			return nil
+		},
+	}
 }

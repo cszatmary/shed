@@ -2,8 +2,6 @@ package spinner
 
 import (
 	"fmt"
-
-	"github.com/mattn/go-isatty"
 )
 
 // TTYSpinner is a wrapper over a spinner that handles whether or not
@@ -15,16 +13,14 @@ type TTYSpinner struct {
 	isaTTY bool
 }
 
-type fder interface {
-	Fd() uintptr
+type TTYOptions struct {
+	Options
+	IsaTTY bool
 }
 
 // NewTTY creates a new TTYSpinner instance.
-func NewTTY(opts Options) *TTYSpinner {
-	s := &TTYSpinner{Spinner: New(opts)}
-	if f, ok := s.out.(fder); ok {
-		s.isaTTY = isatty.IsTerminal(f.Fd())
-	}
+func NewTTY(opts TTYOptions) *TTYSpinner {
+	s := &TTYSpinner{Spinner: New(opts.Options), isaTTY: opts.IsaTTY}
 	if !s.isaTTY {
 		// Persisting messages isn't allowed if not a tty, since messages
 		// are not erased, and are by definition persisted.
