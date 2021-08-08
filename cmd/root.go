@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,8 +10,8 @@ import (
 	"runtime/debug"
 	"strings"
 
-	"github.com/getshiphub/shed/cache"
 	"github.com/getshiphub/shed/client"
+	"github.com/getshiphub/shed/errors"
 	"github.com/mattn/go-isatty"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -57,13 +56,44 @@ func Execute() {
 		c.exitf(nil, "shed requires a minimum Go version of 1.11 to run, current version is %s", goVersion)
 	}
 
-	err = rootCmd.ExecuteContext(ctx)
+	cmd, err := rootCmd.ExecuteContextC(ctx)
 	if errors.Is(err, context.Canceled) {
 		fmt.Fprintln(os.Stderr, "\nOperation cancelled")
 		os.Exit(130)
 	}
-	if errors.Is(err, cache.ErrToolNotInstalled) {
-		c.exitf(err, "Tool(s) not installed. Run 'shed get' to install them.")
+	if ee, ok := err.(*exitError); ok {
+		fmt.Fprintln(os.Stderr, ee.msg)
+		os.Exit(ee.code)
+	}
+	if rootErr := errors.Root(err); rootErr != nil {
+		// Determine a message to show the user to offer help/suggestions.
+		var msg string
+		switch rootErr.Kind {
+		case errors.Invalid:
+			msg = fmt.Sprintf(
+				"Please address the issue and retry the operation.\nRun '%s --help' for details on command usage.",
+				cmd.CommandPath(),
+			)
+		case errors.NotInstalled:
+			msg = "Run 'shed get' to install the tool(s)."
+		case errors.BadState:
+			msg = "Run 'shed get' to have shed resolve the issue and then try again."
+		case errors.Internal:
+			msg = `This is likely a bug. Try running the command again with the '--verbose' flag for more details.
+If the issue persists, consider reporting it at https://github.com/getshiphub/shed/issues.`
+		case errors.IO:
+			msg = fmt.Sprintf(
+				`Ensure you have read and write access to the current directory and %s.
+Also try re-running the command with the '--verbose' flag for more details.`,
+				c.shed.CacheDir(),
+			)
+		case errors.Go:
+			msg = "Check that your version of Go works and you are able to run commands like 'go get' and 'go build'."
+		default:
+			msg = `Try running the command again with the '--verbose' flag for more details.
+If the issue persists, consider reporting it at https://github.com/getshiphub/shed/issues.`
+		}
+		c.exitf(err, msg)
 	}
 	if err != nil {
 		c.exitf(err, "")
@@ -104,6 +134,16 @@ func (c *container) exitf(err error, format string, a ...interface{}) {
 		}
 	}
 	os.Exit(1)
+}
+
+// exitError is used to signal that shed should exit with a given code and message.
+type exitError struct {
+	code int
+	msg  string
+}
+
+func (e *exitError) Error() string {
+	return e.msg
 }
 
 func newRootCommand(c *container) *cobra.Command {
@@ -174,7 +214,7 @@ func newRootCommand(c *container) *cobra.Command {
 
 	rootCmd.AddCommand(
 		newCacheCommand(c),
-		newCompletionsCommand(c),
+		newCompletionsCommand(),
 		newGetCommand(c),
 		newInitCommand(c),
 		newListCommand(c),

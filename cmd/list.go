@@ -29,7 +29,7 @@ For example, 'shed list -u' might print:
 				ShowUpdates: listOpts.showUpdates,
 			})
 			if err != nil {
-				return fmt.Errorf("failed to list tools: %w", err)
+				return err
 			}
 			for _, info := range tools {
 				if info.LatestVersion != "" {

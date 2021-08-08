@@ -3,16 +3,17 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"sort"
 
 	"github.com/getshiphub/shed/cache"
+	"github.com/getshiphub/shed/errors"
 	"github.com/getshiphub/shed/internal/util"
 	"github.com/getshiphub/shed/lockfile"
 	"github.com/getshiphub/shed/tool"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -54,6 +55,7 @@ type Shed struct {
 //
 // By default, the lockfile path used is './shed.lock' and the cache directory is 'os.UserCacheDir()/shed'.
 func NewShed(opts ...Option) (*Shed, error) {
+	const op = errors.Op("client.NewShed")
 	s := &Shed{}
 	for _, opt := range opts {
 		opt(s)
@@ -73,7 +75,7 @@ func NewShed(opts ...Option) (*Shed, error) {
 	if s.cache == nil {
 		userCacheDir, err := os.UserCacheDir()
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to find user cache directory")
+			return nil, errors.New(errors.Invalid, "unable to find user cache directory", op, err)
 		}
 		s.cache = cache.New(filepath.Join(userCacheDir, "shed"), cache.WithLogger(s.logger))
 	}
@@ -85,13 +87,13 @@ func NewShed(opts ...Option) (*Shed, error) {
 		return s, nil
 	}
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to open file %s", s.lockfilePath)
+		return nil, errors.New(errors.IO, fmt.Sprintf("failed to open file %q", s.lockfilePath), op, err)
 	}
 	defer f.Close()
 
 	s.lf, err = lockfile.Parse(f)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to parse lockfile %s", s.lockfilePath)
+		return nil, errors.New(errors.Internal, fmt.Sprintf("failed to parse lockfile %q", s.lockfilePath), op, err)
 	}
 	return s, nil
 }
@@ -131,14 +133,14 @@ func (s *Shed) CleanCache() error {
 	return s.cache.Clean()
 }
 
-func (s *Shed) writeLockfile() error {
+func (s *Shed) writeLockfile(op errors.Op) error {
 	f, err := os.OpenFile(s.lockfilePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
 	if err != nil {
-		return errors.Wrapf(err, "failed to create/open file %s", s.lockfilePath)
+		return errors.New(errors.IO, fmt.Sprintf("failed to create/open file %q", s.lockfilePath), op, err)
 	}
 	defer f.Close()
 	if _, err = s.lf.WriteTo(f); err != nil {
-		return errors.Wrapf(err, "failed to write lockfile to %s", s.lockfilePath)
+		return errors.New(errors.Internal, fmt.Sprintf("failed to write lockfile to %q", s.lockfilePath), op, err)
 	}
 	return nil
 }
@@ -154,18 +156,19 @@ func (s *Shed) writeLockfile() error {
 // All tool names provided must be full import paths, not binary names.
 // If a tool name is invalid, Get will return an error.
 func (s *Shed) Get(toolNames ...string) (*InstallSet, error) {
+	const op = errors.Op("Shed.Get")
 	// Collect all the tools that need to be installed.
 	// Merge the given tools with what exists in the lockfile.
 	seenTools := make(map[string]bool)
 	var tools []tool.Tool
 
-	var errs lockfile.ErrorList
+	var errs errors.List
 	for _, toolName := range toolNames {
 		// This also serves to validate the the given tool name is a valid module name
 		// Use ParseLax since the version might be a query that should be passed to go get.
 		t, err := tool.ParseLax(toolName)
 		if err != nil {
-			errs = append(errs, errors.WithMessagef(err, "invalid tool name %s", toolName))
+			errs = append(errs, errors.New(fmt.Sprintf("invalid tool name %s", toolName), op, err))
 			continue
 		}
 		seenTools[t.ImportPath] = true
@@ -213,6 +216,7 @@ func (is *InstallSet) Notify(ch chan<- tool.Tool) {
 // The provided context is used to terminate the install if the context becomes
 // done before the install completes on its own.
 func (is *InstallSet) Apply(ctx context.Context) error {
+	const op = errors.Op("InstallSet.Apply")
 	successCh := make(chan tool.Tool)
 	failedCh := make(chan error)
 	for _, tl := range is.tools {
@@ -229,7 +233,7 @@ func (is *InstallSet) Apply(ctx context.Context) error {
 			is.s.logger.Debugf("Installing tool: %v", t)
 			installed, err := is.s.cache.Install(ctx, t)
 			if err != nil {
-				failedCh <- errors.WithMessagef(err, "failed to install tool %s", t)
+				failedCh <- errors.New(fmt.Sprintf("failed to install tool %s", t), op, err)
 				return
 			}
 			successCh <- installed
@@ -237,7 +241,7 @@ func (is *InstallSet) Apply(ctx context.Context) error {
 	}
 
 	var completedTools []tool.Tool
-	var errs lockfile.ErrorList
+	var errs errors.List
 	for i := 0; i < len(is.tools); i++ {
 		select {
 		case t := <-successCh:
@@ -250,7 +254,7 @@ func (is *InstallSet) Apply(ctx context.Context) error {
 			// save work on subsequent runs.
 			errs = append(errs, err)
 		case <-ctx.Done():
-			return errors.Wrap(ctx.Err(), "installation was aborted")
+			return ctx.Err()
 		}
 	}
 	if len(errs) > 0 {
@@ -267,10 +271,10 @@ func (is *InstallSet) Apply(ctx context.Context) error {
 			continue
 		}
 		if err := is.s.lf.PutTool(t); err != nil {
-			return errors.Wrapf(err, "failed to add tool %v to lockfile", t)
+			return errors.New(errors.Internal, fmt.Sprintf("failed to add tool %s to lockfile", t), op, err)
 		}
 	}
-	if err := is.s.writeLockfile(); err != nil {
+	if err := is.s.writeLockfile(op); err != nil {
 		return err
 	}
 	return nil
