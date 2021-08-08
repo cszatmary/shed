@@ -9,11 +9,11 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/getshiphub/shed/cache"
-	"github.com/getshiphub/shed/errors"
-	"github.com/getshiphub/shed/internal/util"
-	"github.com/getshiphub/shed/lockfile"
-	"github.com/getshiphub/shed/tool"
+	"github.com/cszatmary/shed/cache"
+	"github.com/cszatmary/shed/errors"
+	"github.com/cszatmary/shed/internal/util"
+	"github.com/cszatmary/shed/lockfile"
+	"github.com/cszatmary/shed/tool"
 	"github.com/sirupsen/logrus"
 )
 

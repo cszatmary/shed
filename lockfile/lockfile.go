@@ -7,8 +7,8 @@ import (
 	"io"
 	"path"
 
-	"github.com/getshiphub/shed/errors"
-	"github.com/getshiphub/shed/tool"
+	"github.com/cszatmary/shed/errors"
+	"github.com/cszatmary/shed/tool"
 )
 
 // ErrNotFound is returned when a tool is not found in a lockfile.

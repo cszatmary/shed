@@ -10,8 +10,8 @@ import (
 	"runtime/debug"
 	"strings"
 
-	"github.com/getshiphub/shed/client"
-	"github.com/getshiphub/shed/errors"
+	"github.com/cszatmary/shed/client"
+	"github.com/cszatmary/shed/errors"
 	"github.com/mattn/go-isatty"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -80,7 +80,7 @@ func Execute() {
 			msg = "Run 'shed get' to have shed resolve the issue and then try again."
 		case errors.Internal:
 			msg = `This is likely a bug. Try running the command again with the '--verbose' flag for more details.
-If the issue persists, consider reporting it at https://github.com/getshiphub/shed/issues.`
+If the issue persists, consider reporting it at https://github.com/cszatmary/shed/issues.`
 		case errors.IO:
 			msg = fmt.Sprintf(
 				`Ensure you have read and write access to the current directory and %s.
@@ -91,7 +91,7 @@ Also try re-running the command with the '--verbose' flag for more details.`,
 			msg = "Check that your version of Go works and you are able to run commands like 'go get' and 'go build'."
 		default:
 			msg = `Try running the command again with the '--verbose' flag for more details.
-If the issue persists, consider reporting it at https://github.com/getshiphub/shed/issues.`
+If the issue persists, consider reporting it at https://github.com/cszatmary/shed/issues.`
 		}
 		c.exitf(err, msg)
 	}

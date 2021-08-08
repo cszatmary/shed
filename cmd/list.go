@@ -3,7 +3,7 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/getshiphub/shed/client"
+	"github.com/cszatmary/shed/client"
 	"github.com/spf13/cobra"
 )
 

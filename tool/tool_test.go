@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/getshiphub/shed/tool"
+	"github.com/cszatmary/shed/tool"
 )
 
 func TestTool(t *testing.T) {
