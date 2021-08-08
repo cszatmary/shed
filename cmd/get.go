@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/cszatmary/shed/client"
 	"github.com/cszatmary/shed/internal/spinner"
 	"github.com/cszatmary/shed/tool"
 	"github.com/spf13/cobra"
@@ -10,6 +11,7 @@ import (
 
 func newGetCommand(c *container) *cobra.Command {
 	var getOpts struct {
+		update      bool
 		concurrency int
 	}
 
@@ -30,6 +32,10 @@ Tools can be uninstalled by using the special '@none' version suffix.
 
 If no tools are provided, then shed will simply install all tools in the lockfile.
 
+The '-u, --update' flag instructs get to update the provided tools to use newer minor or patch releases when available.
+If no tools are provided, all tools in the lockfile will be updated. When this flag is used, tools are not allowed
+to have a version suffix.
+
 Examples:
 
 Install the latest version of a tool:
@@ -46,7 +52,15 @@ Install all tools specified in shed.lock:
 
 Uninstall a tool:
 
-	shed get golang.org/x/tools/cmd/stringer@none`,
+	shed get golang.org/x/tools/cmd/stringer@none
+
+Update a specific tool to the latest minor or patch version:
+
+	shed get -u golang.org/x/tools/cmd/stringer
+
+Update all tools in the lockfile to their latest minor or patch version:
+
+	shed get -u`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if getOpts.concurrency < 0 {
 				return &exitError{
@@ -56,7 +70,10 @@ Uninstall a tool:
 				}
 			}
 
-			installSet, err := c.shed.Get(args...)
+			installSet, err := c.shed.Get(client.GetOptions{
+				ToolNames: args,
+				Update:    getOpts.update,
+			})
 			if err != nil {
 				return fmt.Errorf("unable to determine list of tools to install: %w", err)
 			}
@@ -95,6 +112,7 @@ Uninstall a tool:
 		},
 	}
 
+	getCmd.Flags().BoolVarP(&getOpts.update, "update", "u", false, "update tools to their latest minor or patch version")
 	getCmd.Flags().IntVarP(&getOpts.concurrency, "concurrency", "c", 0, "amount of tasks to run concurrently (default: number of CPUs)")
 	return getCmd
 }

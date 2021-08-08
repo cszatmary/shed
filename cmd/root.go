@@ -213,7 +213,7 @@ func newRootCommand(c *container) *cobra.Command {
 		newRunCommand(c),
 	)
 
-	rootCmd.PersistentFlags().BoolVar(&c.opts.verbose, "verbose", false, "enable verbose logging")
+	rootCmd.PersistentFlags().BoolVarP(&c.opts.verbose, "verbose", "v", false, "enable verbose logging")
 	rootCmd.PersistentFlags().StringVar(&c.opts.progressMode, "progress", "auto", "sets if a progress spinner should be used, valid values: on, off, auto")
 	return rootCmd
 }
