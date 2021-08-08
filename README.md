@@ -5,6 +5,12 @@ It is built on top of Go Modules, and allows for reproducible dev environments.
 
 ## Installation
 
+#### Homebrew
+
+```
+brew install cszatmary/tap/shed
+```
+
 #### Binary Release
 
 ```
