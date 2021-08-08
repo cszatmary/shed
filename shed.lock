@@ -1,19 +1,19 @@
 {
   "tools": {
     "github.com/cszatmary/go-fish": {
-      "version": "v0.0.0-20210414180724-443d9e00794d"
+      "version": "v0.1.0"
     },
     "github.com/golangci/golangci-lint/cmd/golangci-lint": {
-      "version": "v1.39.0"
+      "version": "v1.41.1"
     },
     "github.com/goreleaser/godownloader": {
       "version": "v0.1.1-0.20200813202458-888d721de8bd"
     },
     "github.com/goreleaser/goreleaser": {
-      "version": "v0.162.0"
+      "version": "v0.174.2"
     },
     "golang.org/x/tools/cmd/goimports": {
-      "version": "v0.1.0"
+      "version": "v0.1.5"
     }
   }
 }

@@ -110,6 +110,7 @@ var availableTools = map[string]map[string]string{
 	"github.com/cszatmary/go-fish": {
 		"v0.1.0": "v0.1.0",
 		"22d10c9b658df297b17b33c836a60fb943ef5a5f": "v0.0.0-20201203230243-22d10c9b658d",
+		"v0.0.0-20201203230243-22d10c9b658d":       "v0.0.0-20201203230243-22d10c9b658d",
 	},
 	"github.com/golangci/golangci-lint/cmd/golangci-lint": {
 		"v1.33.0": "v1.33.0",
@@ -165,6 +166,7 @@ func TestGet(t *testing.T) {
 		name          string
 		lockfileTools []tool.Tool
 		installTools  []string
+		update        bool
 		wantLen       int
 		wantTools     []tool.Tool
 	}{
@@ -247,6 +249,55 @@ func TestGet(t *testing.T) {
 				{ImportPath: "github.com/Shopify/ejson/cmd/ejson", Version: "v1.1.0"},
 			},
 		},
+		{
+			name: "update all in lockfile",
+			lockfileTools: []tool.Tool{
+				{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"},
+				{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.28.3"},
+				{ImportPath: "github.com/Shopify/ejson/cmd/ejson", Version: "v1.1.0"},
+			},
+			installTools: nil,
+			update:       true,
+			wantLen:      3,
+			wantTools: []tool.Tool{
+				{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"},
+				{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.33.0"},
+				{ImportPath: "github.com/Shopify/ejson/cmd/ejson", Version: "v1.2.2"},
+			},
+		},
+		{
+			name: "update specific tools",
+			lockfileTools: []tool.Tool{
+				{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"},
+				{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.28.3"},
+				{ImportPath: "github.com/Shopify/ejson/cmd/ejson", Version: "v1.1.0"},
+			},
+			installTools: []string{
+				"github.com/Shopify/ejson/cmd/ejson",
+			},
+			update:  true,
+			wantLen: 3,
+			wantTools: []tool.Tool{
+				{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"},
+				{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.28.3"},
+				{ImportPath: "github.com/Shopify/ejson/cmd/ejson", Version: "v1.2.2"},
+			},
+		},
+		{
+			name: "does not update prerelease versions",
+			lockfileTools: []tool.Tool{
+				{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.0.0-20201203230243-22d10c9b658d"},
+				{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.28.3"},
+				{ImportPath: "github.com/Shopify/ejson/cmd/ejson", Version: "v1.1.0"},
+			},
+			update:  true,
+			wantLen: 3,
+			wantTools: []tool.Tool{
+				{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.0.0-20201203230243-22d10c9b658d"},
+				{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.33.0"},
+				{ImportPath: "github.com/Shopify/ejson/cmd/ejson", Version: "v1.2.2"},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -271,7 +322,10 @@ func TestGet(t *testing.T) {
 				t.Fatalf("failed to create shed client %v", err)
 			}
 
-			installSet, err := s.Get(tt.installTools...)
+			installSet, err := s.Get(client.GetOptions{
+				ToolNames: tt.installTools,
+				Update:    tt.update,
+			})
 			if err != nil {
 				t.Errorf("want nil error, got %v", err)
 			}
@@ -332,11 +386,13 @@ func TestGetError(t *testing.T) {
 		t.Fatalf("failed to create shed client %v", err)
 	}
 
-	_, err = s.Get(
-		"github.com/cszatmary/go-fish",
-		"golangci-lint",
-		"github.com/Shopify/ejson/cmd/ejson@v1.2.2",
-	)
+	_, err = s.Get(client.GetOptions{
+		ToolNames: []string{
+			"github.com/cszatmary/go-fish",
+			"golangci-lint",
+			"github.com/Shopify/ejson/cmd/ejson@v1.2.2",
+		},
+	})
 	errList, ok := err.(errors.List)
 	if !ok {
 		t.Errorf("want error to be errors.List, got %s: %T", err, err)
@@ -417,7 +473,7 @@ func TestList(t *testing.T) {
 
 			// Install tools, otherwise List might error
 			ctx := context.Background()
-			installSet, err := s.Get()
+			installSet, err := s.Get(client.GetOptions{})
 			if err != nil {
 				t.Fatalf("failed to install tools %v", err)
 			}

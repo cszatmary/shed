@@ -19,7 +19,7 @@ func newListCommand(c *container) *cobra.Command {
 		Short: "List Go tools specified in shed.lock.",
 		Long: `shed list prints a list of tools specified in shed.lock. Each tool will consist of the import path and the version.
 
-The --upgrades or -u flag causes shed to list information about available upgrades for each tool.
+The '-u, --updates' flag causes shed to list information about available upgrades for each tool.
 If a newer version is found for a tool, shed will print it in brackets after the current version.
 
 For example, 'shed list -u' might print:

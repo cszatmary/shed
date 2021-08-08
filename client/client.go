@@ -16,12 +16,18 @@ import (
 	"github.com/cszatmary/shed/lockfile"
 	"github.com/cszatmary/shed/tool"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/mod/semver"
 )
 
 const LockfileName = "shed.lock"
 
-// noneVersion is a special module version that signifies the module should be removed.
-const noneVersion = "none"
+const (
+	// noneVersion is a special module version that signifies the module should be removed.
+	noneVersion = "none"
+	// latestVersion is a special module version that signifies the latest
+	// available version should be installed.
+	latestVersion = "latest"
+)
 
 // ResolveLockfilePath resolves the path to the nearest shed lockfile starting at dir.
 // It will keep searching parent directories until either a lockfile is found,
@@ -146,8 +152,19 @@ func (s *Shed) writeLockfile(op errors.Op) error {
 	return nil
 }
 
-// Get computes a set of tools that should be installed. It can be given zero or
-// more tools as arguments. These will be unioned with the tools in the lockfile
+// GetOptions is used to configure Shed.Get.
+type GetOptions struct {
+	// ToolNames is a list of tools that should be installed.
+	// These will be unioned with the tools specified in the lockfile.
+	ToolNames []string
+	// Update sets whether or not tools should be updated to the latest available
+	// minor or patch version. If ToolNames is not empty, only those tools will be
+	// updated. Otherwise, all tools in the lockfile will be updated.
+	Update bool
+}
+
+// Get computes a set of tools that should be installed. Zero or more tools can be
+// specified in opts. These will be unioned with the tools in the lockfile
 // to produce a final set of tools to install. Get will return an InstallSet instance
 // which can be used to perform the actual installation.
 //
@@ -156,7 +173,9 @@ func (s *Shed) writeLockfile(op errors.Op) error {
 //
 // All tool names provided must be full import paths, not binary names.
 // If a tool name is invalid, Get will return an error.
-func (s *Shed) Get(toolNames ...string) (*InstallSet, error) {
+//
+// If opts.Update is set, tool names must not include version suffixes.
+func (s *Shed) Get(opts GetOptions) (*InstallSet, error) {
 	const op = errors.Op("Shed.Get")
 	// Collect all the tools that need to be installed.
 	// Merge the given tools with what exists in the lockfile.
@@ -164,13 +183,22 @@ func (s *Shed) Get(toolNames ...string) (*InstallSet, error) {
 	var tools []tool.Tool
 
 	var errs errors.List
-	for _, toolName := range toolNames {
+	for _, toolName := range opts.ToolNames {
 		// This also serves to validate the the given tool name is a valid module name
 		// Use ParseLax since the version might be a query that should be passed to go get.
 		t, err := tool.ParseLax(toolName)
 		if err != nil {
 			errs = append(errs, errors.New(fmt.Sprintf("invalid tool name %s", toolName), op, err))
 			continue
+		}
+		if opts.Update {
+			// Version is not allowed if updating, since the latest version will be installed.
+			if t.Version != "" && t.Version != noneVersion && t.Version != latestVersion {
+				msg := fmt.Sprintf("tool %s must not have a version when updating", t)
+				errs = append(errs, errors.New(errors.Invalid, msg, op))
+				continue
+			}
+			t.Version = latestVersion
 		}
 		seenTools[t.ImportPath] = true
 		tools = append(tools, t)
@@ -179,13 +207,21 @@ func (s *Shed) Get(toolNames ...string) (*InstallSet, error) {
 		return nil, errs
 	}
 
+	// If update and no tools provided update all in the lockfile.
+	updateAll := opts.Update && len(opts.ToolNames) == 0
 	// Take union with lockfile
 	it := s.lf.Iter()
 	for it.Next() {
 		t := it.Value()
-		if ok := seenTools[t.ImportPath]; !ok {
-			tools = append(tools, t)
+		if ok := seenTools[t.ImportPath]; ok {
+			continue
 		}
+		// Skip tools with a prelease version installed since the latest version might
+		// actually be older than the current version which was explicitly installed.
+		if updateAll && semver.Prerelease(t.Version) == "" {
+			t.Version = latestVersion
+		}
+		tools = append(tools, t)
 	}
 	return &InstallSet{s: s, tools: tools}, nil
 }
@@ -283,7 +319,7 @@ func (is *InstallSet) Apply(ctx context.Context) error {
 	for _, t := range completedTools {
 		if t.Version == noneVersion {
 			// Uninstall the tool by removing it from the lockfile.
-			// Unlike Uninstall() this will not error if the tool is not in the lockfile,
+			// This will not error if the tool is not in the lockfile,
 			// instead it will be silently ignored.
 			t.Version = ""
 			is.s.lf.DeleteTool(t)
