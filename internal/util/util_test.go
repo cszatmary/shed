@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/getshiphub/shed/internal/util"
+	"github.com/cszatmary/shed/internal/util"
 )
 
 func TestFileOrDirExists(t *testing.T) {

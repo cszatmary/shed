@@ -8,7 +8,7 @@ It is built on top of Go Modules, and allows for reproducible dev environments.
 #### Binary Release
 
 ```
-curl -sSfL https://raw.githubusercontent.com/getshiphub/shed/master/scripts/install.sh | sh -s -- -b /usr/local/bin
+curl -sSfL https://raw.githubusercontent.com/cszatmary/shed/main/scripts/install.sh | sh -s -- -b /usr/local/bin
 ```
 
 This will install it to `/usr/local/bin/shed`. You can specify a different path to `-b` to customize the install location.
@@ -16,7 +16,7 @@ This will install it to `/usr/local/bin/shed`. You can specify a different path 
 You can also install a specific version by providing the git tag as an argument.
 
 ```
-curl -sSfL https://raw.githubusercontent.com/getshiphub/shed/master/scripts/install.sh | sh -s -- -b /usr/local/bin v0.1.0
+curl -sSfL https://raw.githubusercontent.com/cszatmary/shed/main/scripts/install.sh | sh -s -- -b /usr/local/bin v0.1.0
 ```
 
 #### Install from source
@@ -24,7 +24,7 @@ curl -sSfL https://raw.githubusercontent.com/getshiphub/shed/master/scripts/inst
 You can also install shed using `go get`:
 
 ```
-go get github.com/getshiphub/shed
+go get github.com/cszatmary/shed
 ```
 
 Note: Installing from source requires a minimum Go version of 1.16.

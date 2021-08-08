@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/getshiphub/shed/lockfile"
+	"github.com/cszatmary/shed/lockfile"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )

@@ -18,7 +18,7 @@ builds:
       - arm
       - arm64
     ldflags:
-      - -s -w -X github.com/getshiphub/shed/cmd.version={{.Version}}
+      - -s -w -X github.com/cszatmary/shed/cmd.version={{.Version}}
 
 archives:
   - replacements:
@@ -41,22 +41,21 @@ changelog:
 
 release:
   github:
-    owner: getshiphub
+    owner: cszatmary
     name: shed
 
-# TODO(@cszatmary): Figure out homebrew release
-# brews:
-#   - tap:
-#       owner: getshiphub
-#       name: homebrew-tap
-#     commit_author:
-#       name: cszatmary
-#       email: cs@christopherszatmary.com
-#     folder: Formula
-#     description: "Easily manage Go tool dependencies"
-#     test: |
-#       system "#{bin}/shed --version"
-#     install: |
-#       bin.install "shed"
-#       bash_completion.install "completions/shed.bash"
-#       zsh_completion.install "completions/_shed"
+brews:
+  - tap:
+      owner: cszatmary
+      name: homebrew-tap
+    commit_author:
+      name: cszatmary
+      email: cs@christopherszatmary.com
+    folder: Formula
+    description: "Easily manage Go tool dependencies"
+    test: |
+      system "#{bin}/shed --version"
+    install: |
+      bin.install "shed"
+      bash_completion.install "completions/shed.bash"
+      zsh_completion.install "completions/_shed"

@@ -3,8 +3,8 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/getshiphub/shed/internal/spinner"
-	"github.com/getshiphub/shed/tool"
+	"github.com/cszatmary/shed/internal/spinner"
+	"github.com/cszatmary/shed/tool"
 	"github.com/spf13/cobra"
 )
 

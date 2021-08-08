@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getshiphub/shed/internal/spinner"
+	"github.com/cszatmary/shed/internal/spinner"
 )
 
 type syncBuffer struct {

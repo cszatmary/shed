@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/getshiphub/shed/client"
-	"github.com/getshiphub/shed/lockfile"
+	"github.com/cszatmary/shed/client"
+	"github.com/cszatmary/shed/lockfile"
 	"github.com/spf13/cobra"
 )
 

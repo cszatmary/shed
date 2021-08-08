@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/getshiphub/shed/errors"
+	"github.com/cszatmary/shed/errors"
 	"golang.org/x/mod/module"
 	"golang.org/x/mod/semver"
 )

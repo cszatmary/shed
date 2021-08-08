@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/getshiphub/shed/errors"
+	"github.com/cszatmary/shed/errors"
 )
 
 func TestFormat(t *testing.T) {

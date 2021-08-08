@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/getshiphub/shed/internal/spinner"
+	"github.com/cszatmary/shed/internal/spinner"
 )
 
 func TestTTYSpinner(t *testing.T) {
