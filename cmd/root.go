@@ -4,12 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"os/signal"
-	"regexp"
 	"runtime/debug"
 	"strings"
 
+	"github.com/cszatmary/shed/cache"
 	"github.com/cszatmary/shed/client"
 	"github.com/cszatmary/shed/errors"
 	"github.com/mattn/go-isatty"
@@ -35,26 +34,6 @@ func Execute() {
 		<-abort
 		cancel()
 	}()
-
-	// Check that go is installed with the minimum required version
-	output, err := exec.CommandContext(ctx, "go", "version").Output()
-	if errors.Is(err, context.Canceled) {
-		fmt.Fprintln(os.Stderr, "\nOperation cancelled")
-		os.Exit(130)
-	}
-	if err != nil {
-		c.exitf(err, "Failed to check Go version. Make sure Go 1.11 or later is installed and in your PATH.")
-	}
-	regex := regexp.MustCompile(`go?([0-9]+(?:\.[0-9]+)?(?:\.[0-9]+)?)`)
-	matches := regex.FindSubmatch(output)
-	if len(matches) != 2 {
-		c.exitf(nil, "Unexpected go version format %s, unable to parse", output)
-	}
-	goVersion := string(matches[1])
-	// The semver package requires strings to be prefixed with 'v' to be considered valid
-	if semver.Compare("v"+goVersion, "v1.11") == -1 {
-		c.exitf(nil, "shed requires a minimum Go version of 1.11 to run, current version is %s", goVersion)
-	}
 
 	cmd, err := rootCmd.ExecuteContextC(ctx)
 	if errors.Is(err, context.Canceled) {
@@ -190,6 +169,20 @@ func newRootCommand(c *container) *cobra.Command {
 				// to a spinner before then.
 				ForceColors: isaTTY,
 			})
+
+			// Check that go is installed with the minimum required version
+			goVersion, err := cache.GoVersion(cmd.Context())
+			if err != nil {
+				return err
+			}
+			// The semver package requires strings to be prefixed with 'v' to be considered valid
+			if semver.Compare("v"+goVersion, "v1.11") == -1 {
+				return &exitError{
+					code: 1,
+					msg:  fmt.Sprintf("shed requires a minimum Go version of 1.11 to run, current version is %s", goVersion),
+				}
+			}
+			logger.Debugf("Go version is %s", goVersion)
 
 			// Find the nearest shed lockfile if it exists
 			cwd, err := os.Getwd()

@@ -216,7 +216,7 @@ func (c *Cache) download(ctx context.Context, op errors.Op, t tool.Tool) (tool.T
 
 	// Create empty go.mod file so we can download the tool.
 	// Can just use _ as the module name since this is a "fake" module.
-	if err := createGoModFile(op, "_", modDir); err != nil {
+	if err := createGoModFile(ctx, op, "_", modDir); err != nil {
 		return t, err
 	}
 
