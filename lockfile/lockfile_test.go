@@ -110,6 +110,9 @@ func TestLockfileGet(t *testing.T) {
 			if tl != tt.wantTool {
 				t.Errorf("got %+v, want %+v", tl, tt.wantTool)
 			}
+			if lf.LenTools() != 4 {
+				t.Errorf("got len %d, want 4", lf.LenTools())
+			}
 		})
 	}
 }
@@ -119,6 +122,9 @@ func TestLockfilePutReplace(t *testing.T) {
 	want := tool.Tool{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"}
 	if err := lf.PutTool(want); err != nil {
 		t.Fatalf("failed to add tool %v to lockfile: %v", want, err)
+	}
+	if lf.LenTools() != 1 {
+		t.Errorf("got len %d, want 1", lf.LenTools())
 	}
 
 	tl, err := lf.GetTool("go-fish")
@@ -134,6 +140,9 @@ func TestLockfilePutReplace(t *testing.T) {
 	err = lf.PutTool(want)
 	if err != nil {
 		t.Errorf("want nil error, got %v", err)
+	}
+	if lf.LenTools() != 1 {
+		t.Errorf("got len %d, want 1", lf.LenTools())
 	}
 
 	tl, err = lf.GetTool("go-fish")
@@ -180,51 +189,62 @@ func TestLockfilePutError(t *testing.T) {
 }
 
 func TestLockfileDelete(t *testing.T) {
-	lf := newLockfile(t, []tool.Tool{
+	tools := []tool.Tool{
 		{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"},
 		{ImportPath: "github.com/golangci/golangci-lint/cmd/golangci-lint", Version: "v1.33.0"},
 		{ImportPath: "golang.org/x/tools/cmd/stringer", Version: "v0.0.0-20201211185031-d93e913c1a58"},
 		{ImportPath: "example.org/z/random/stringer/v2/cmd/stringer", Version: "v2.1.0"},
 		{ImportPath: "github.com/Shopify/ejson/cmd/ejson", Version: "v1.2.0"},
-	})
+	}
 
 	tests := []struct {
-		name string
-		tool tool.Tool
+		name    string
+		tool    tool.Tool
+		wantLen int
 	}{
 		{
-			name: "single element in bucket",
-			tool: tool.Tool{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"},
+			name:    "single element in bucket",
+			tool:    tool.Tool{ImportPath: "github.com/cszatmary/go-fish", Version: "v0.1.0"},
+			wantLen: 4,
 		},
 		{
-			name: "multiple elements in bucket",
-			tool: tool.Tool{ImportPath: "golang.org/x/tools/cmd/stringer", Version: "v0.0.0-20201211185031-d93e913c1a58"},
+			name:    "multiple elements in bucket",
+			tool:    tool.Tool{ImportPath: "golang.org/x/tools/cmd/stringer", Version: "v0.0.0-20201211185031-d93e913c1a58"},
+			wantLen: 4,
 		},
 		{
-			name: "remainder in bucket",
-			tool: tool.Tool{ImportPath: "example.org/z/random/stringer/v2/cmd/stringer", Version: "v2.1.0"},
+			name:    "different element in bucket",
+			tool:    tool.Tool{ImportPath: "example.org/z/random/stringer/v2/cmd/stringer", Version: "v2.1.0"},
+			wantLen: 4,
 		},
 		{
-			name: "does not exist",
-			tool: tool.Tool{ImportPath: "example.org/z/random/stringer/v2/cmd/stringer", Version: "v2.1.0"},
+			name:    "does not exist",
+			tool:    tool.Tool{ImportPath: "example.org/z/random/fmt", Version: "v1.0.2"},
+			wantLen: 5,
 		},
 		{
-			name: "does not exist in bucket",
-			tool: tool.Tool{ImportPath: "golang.org/x/tools/cmd/golangci-lint", Version: "v0.0.1"},
+			name:    "does not exist in bucket",
+			tool:    tool.Tool{ImportPath: "golang.org/x/tools/cmd/golangci-lint", Version: "v0.0.1"},
+			wantLen: 5,
 		},
 		{
-			name: "version not specified",
-			tool: tool.Tool{ImportPath: "github.com/Shopify/ejson/cmd/ejson"},
+			name:    "version not specified",
+			tool:    tool.Tool{ImportPath: "github.com/Shopify/ejson/cmd/ejson"},
+			wantLen: 4,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			lf := newLockfile(t, tools)
 			lf.DeleteTool(tt.tool)
 
 			_, err := lf.GetTool(tt.tool.ImportPath)
 			if !errors.Is(err, lockfile.ErrNotFound) {
 				t.Errorf("want err to match %v, got %v", lockfile.ErrNotFound, err)
+			}
+			if lf.LenTools() != tt.wantLen {
+				t.Errorf("got len %d, want %d", lf.LenTools(), tt.wantLen)
 			}
 		})
 	}
@@ -324,6 +344,9 @@ func TestParse(t *testing.T) {
 	lf, err := lockfile.Parse(r)
 	if err != nil {
 		t.Errorf("want nil error, got %v", err)
+	}
+	if lf.LenTools() != 4 {
+		t.Errorf("got len %d, want 4", lf.LenTools())
 	}
 
 	tl, err := lf.GetTool("github.com/cszatmary/go-fish")

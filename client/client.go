@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 
 	"github.com/cszatmary/shed/cache"
@@ -193,6 +194,10 @@ func (s *Shed) Get(toolNames ...string) (*InstallSet, error) {
 // To perform the installation call the Apply method.
 // To abort the install, simply discard the InstallSet object.
 type InstallSet struct {
+	// Concurrency sets the amount of installs that will run concurrently.
+	// It defaults to the number of CPUs available.
+	Concurrency uint
+
 	s        *Shed
 	tools    []tool.Tool
 	notifyCh chan<- tool.Tool
@@ -217,26 +222,38 @@ func (is *InstallSet) Notify(ch chan<- tool.Tool) {
 // done before the install completes on its own.
 func (is *InstallSet) Apply(ctx context.Context) error {
 	const op = errors.Op("InstallSet.Apply")
-	successCh := make(chan tool.Tool)
-	failedCh := make(chan error)
+
+	type result struct {
+		t   tool.Tool
+		err error
+	}
+	resultCh := make(chan result, len(is.tools))
+	concurrency := getConcurrency(is.Concurrency)
+	is.s.logger.Debugf("Using concurrency %d", concurrency)
+	semCh := make(chan struct{}, concurrency)
 	for _, tl := range is.tools {
+		semCh <- struct{}{}
 		go func(t tool.Tool) {
+			defer func() {
+				<-semCh
+			}()
+
 			// go get supports the special version suffix '@none' which means remove the module.
 			// See https://golang.org/ref/mod#go-get for more details.
 			// Support this for consistency since we want to shed to just work with all module queries.
 			if t.Version == noneVersion {
 				is.s.logger.Debugf("Uninstalling tool: %s", t.ImportPath)
-				successCh <- t
+				resultCh <- result{t: t}
 				return
 			}
 
 			is.s.logger.Debugf("Installing tool: %v", t)
 			installed, err := is.s.cache.Install(ctx, t)
 			if err != nil {
-				failedCh <- errors.New(fmt.Sprintf("failed to install tool %s", t), op, err)
+				resultCh <- result{err: errors.New(fmt.Sprintf("failed to install tool %s", t), op, err)}
 				return
 			}
-			successCh <- installed
+			resultCh <- result{t: installed}
 		}(tl)
 	}
 
@@ -244,15 +261,17 @@ func (is *InstallSet) Apply(ctx context.Context) error {
 	var errs errors.List
 	for i := 0; i < len(is.tools); i++ {
 		select {
-		case t := <-successCh:
-			completedTools = append(completedTools, t)
-			if is.notifyCh != nil {
-				is.notifyCh <- t
+		case r := <-resultCh:
+			if r.err != nil {
+				// Continue even if a tool failed because they are cached so it will
+				// save work on subsequent runs.
+				errs = append(errs, r.err)
+				continue
 			}
-		case err := <-failedCh:
-			// Continue even if a tool failed because they are cached so it will
-			// save work on subsequent runs.
-			errs = append(errs, err)
+			completedTools = append(completedTools, r.t)
+			if is.notifyCh != nil {
+				is.notifyCh <- r.t
+			}
 		case <-ctx.Done():
 			return ctx.Err()
 		}
@@ -294,6 +313,10 @@ func (s *Shed) ToolPath(toolName string) (string, error) {
 type ListOptions struct {
 	// ShowUpdates makes List check if a newer version of each tool is available.
 	ShowUpdates bool
+	// Concurrency sets the amount of update checks that will happen
+	// concurrently when ShowUpdates is true.
+	// It defaults to the number of CPUs available.
+	Concurrency uint
 }
 
 // ToolInfo contains information about a tool returned by Shed.List.
@@ -309,21 +332,80 @@ type ToolInfo struct {
 // List returns a list of all the tools specified in the lockfile.
 // opts can be used to customize how List behaves.
 func (s *Shed) List(ctx context.Context, opts ListOptions) ([]ToolInfo, error) {
-	var tools []ToolInfo
+	// If not checking updates, then skip any concurrency
+	if !opts.ShowUpdates {
+		var tools []ToolInfo
+		it := s.lf.Iter()
+		for it.Next() {
+			tools = append(tools, ToolInfo{Tool: it.Value()})
+		}
+		sort.Slice(tools, func(i, j int) bool {
+			return tools[i].Tool.ImportPath < tools[j].Tool.ImportPath
+		})
+		return tools, nil
+	}
+
+	// Create a cancel context so we can bail and stop any remaining
+	// update checks if one fails
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	type result struct {
+		info ToolInfo
+		err  error
+	}
+	resultCh := make(chan result, s.lf.LenTools())
+	concurrency := getConcurrency(opts.Concurrency)
+	s.logger.Debugf("Using concurrency %d", concurrency)
+	semCh := make(chan struct{}, concurrency)
 	it := s.lf.Iter()
 	for it.Next() {
-		info := ToolInfo{Tool: it.Value()}
-		if opts.ShowUpdates {
-			latest, err := s.cache.FindUpdate(ctx, info.Tool)
+		semCh <- struct{}{}
+		go func(t tool.Tool) {
+			defer func() {
+				<-semCh
+			}()
+
+			latest, err := s.cache.FindUpdate(ctx, t)
 			if err != nil {
-				return nil, err
+				resultCh <- result{err: err}
+				return
 			}
-			info.LatestVersion = latest
+			resultCh <- result{info: ToolInfo{Tool: t, LatestVersion: latest}}
+		}(it.Value())
+	}
+
+	var tools []ToolInfo
+	for i := 0; i < s.lf.LenTools(); i++ {
+		select {
+		case r := <-resultCh:
+			if r.err != nil {
+				return nil, r.err
+			}
+			tools = append(tools, r.info)
+		case <-ctx.Done():
+			return nil, ctx.Err()
 		}
-		tools = append(tools, info)
 	}
 	sort.Slice(tools, func(i, j int) bool {
 		return tools[i].Tool.ImportPath < tools[j].Tool.ImportPath
 	})
 	return tools, nil
+}
+
+// getConcurrency returns either concurrency or the number of CPUs if
+// concurrency is 0. If the number of CPUs cannot be determined,
+// 1 will be returned.
+func getConcurrency(concurrency uint) uint {
+	if concurrency != 0 {
+		return concurrency
+	}
+	numCPUs := runtime.NumCPU()
+	// Check for negative number just to be safe since the type is int.
+	// Better safe than sorry and having an overflow.
+	if numCPUs > 0 {
+		return uint(numCPUs)
+	}
+	// If we get here somehow just execute everything serially.
+	return 1
 }
