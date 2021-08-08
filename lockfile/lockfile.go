@@ -3,30 +3,29 @@ package lockfile
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"path"
-	"strings"
 
+	"github.com/getshiphub/shed/errors"
 	"github.com/getshiphub/shed/tool"
 )
 
 // ErrNotFound is returned when a tool is not found in a lockfile.
-var ErrNotFound = errors.New("lockfile: tool not found")
+var ErrNotFound = errors.Str("lockfile: tool not found")
 
 // ErrIncorrectVersion is returned when the version of a tool found
 // is different then the version requested.
-var ErrIncorrectVersion = errors.New("lockfile: incorrect version of tool")
+var ErrIncorrectVersion = errors.Str("lockfile: incorrect version of tool")
 
 // ErrMultipleTools indicates that multiple tools with the same name were found
 // in the lockfile.
-var ErrMultipleTools = errors.New("lockfile: multiple tools found with the same name")
+var ErrMultipleTools = errors.Str("lockfile: multiple tools found with the same name")
 
 // ErrInvalidVersion is returned when adding a tool to a lockfile that does not have a
 // valid SemVer. The version in a lockfile must be an exact version, it cannot be
 // a module query (ex: branch name or commit SHA) or a shorthand version.
-var ErrInvalidVersion = errors.New("lockfile: tool has invalid version")
+var ErrInvalidVersion = errors.Str("lockfile: tool has invalid version")
 
 // Lockfile represents a shed lockfile. The lockfile is responsible for keeping
 // track of installed tools as well as their versions so shed can always
@@ -284,17 +283,6 @@ type lockfileSchema struct {
 	Tools map[string]toolSchema `json:"tools"`
 }
 
-// ErrorList is a list of errors encountered during parsing.
-type ErrorList []error
-
-func (e ErrorList) Error() string {
-	errStrs := make([]string, len(e))
-	for i, err := range e {
-		errStrs[i] = err.Error()
-	}
-	return strings.Join(errStrs, "\n")
-}
-
 // Parse reads from r and parses the data into a Lockfile struct.
 func Parse(r io.Reader) (*Lockfile, error) {
 	lfSchema := lockfileSchema{}
@@ -306,7 +294,7 @@ func Parse(r io.Reader) (*Lockfile, error) {
 	lf := &Lockfile{tools: make(map[string][]tool.Tool)}
 	// Parse all the tools in the lockfile. If errors are encountered, save
 	// them and continue. This way multiple errors can be reported at once.
-	var errs ErrorList
+	var errs errors.List
 	for importPath, tlSchema := range lfSchema.Tools {
 		t, err := tool.Parse(importPath + "@" + tlSchema.Version)
 		if err != nil {

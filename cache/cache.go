@@ -6,19 +6,16 @@ package cache
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
+	"github.com/getshiphub/shed/errors"
 	"github.com/getshiphub/shed/internal/util"
 	"github.com/getshiphub/shed/tool"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/mod/modfile"
 )
-
-var ErrToolNotInstalled = errors.New("cache: tool not installed")
 
 // Cache manages tools in an OS filesystem directory.
 type Cache struct {
@@ -77,7 +74,7 @@ func (c *Cache) Dir() string {
 // Clean removes the cache directory and all contents from the filesystem.
 func (c *Cache) Clean() error {
 	if err := os.RemoveAll(c.rootDir); err != nil {
-		return errors.Wrapf(err, "cache: clean failed")
+		return errors.New(errors.IO, "cache clean failed", errors.Op("Cache.Clean"), err)
 	}
 	return nil
 }
@@ -95,6 +92,7 @@ func (c *Cache) toolsDir() string {
 // The provided context is used to terminate the install if the context becomes
 // done before the install completes on its own.
 func (c *Cache) Install(ctx context.Context, t tool.Tool) (tool.Tool, error) {
+	const op = errors.Op("Cache.Install")
 	select {
 	case <-ctx.Done():
 		return t, ctx.Err()
@@ -103,14 +101,14 @@ func (c *Cache) Install(ctx context.Context, t tool.Tool) (tool.Tool, error) {
 
 	// Make sure import path is set as it's required for download
 	if t.ImportPath == "" {
-		return t, errors.New("import path is required on module")
+		return t, errors.New(errors.Internal, "import path is missing from tool")
 	}
 
 	// Download step
 
-	downloadedTool, err := c.download(ctx, t)
+	downloadedTool, err := c.download(ctx, op, t)
 	if err != nil {
-		return t, errors.WithMessagef(err, "failed to download tool: %s", t)
+		return t, errors.New(fmt.Sprintf("failed to download tool %s", t), op, err)
 	}
 
 	// Build step
@@ -139,7 +137,7 @@ func (c *Cache) Install(ctx context.Context, t tool.Tool) (tool.Tool, error) {
 
 	err = c.goClient.Build(ctx, downloadedTool.ImportPath, binPath, binDir)
 	if err != nil {
-		return downloadedTool, errors.WithMessagef(err, "failed to build tool: %s", downloadedTool)
+		return downloadedTool, errors.New(fmt.Sprintf("failed to build tool %s", downloadedTool), op, err)
 	}
 
 	c.logger.WithFields(logrus.Fields{
@@ -158,9 +156,8 @@ func (c *Cache) Install(ctx context.Context, t tool.Tool) (tool.Tool, error) {
 // For example if the import path is golang.org/x/tools/cmd/stringer then download will create
 // BASE_DIR/golang.org/x/tools/cmd/stringer@VERSION/go.mod where BASE_DIR is the baseDir parameter
 // and VERSION is the version of the tool (either explicit or resolved).
-func (c *Cache) download(ctx context.Context, t tool.Tool) (tool.Tool, error) {
-	// Get the path to where the tool will be installed
-	// This is where the go.mod file will be
+func (c *Cache) download(ctx context.Context, op errors.Op, t tool.Tool) (tool.Tool, error) {
+	// Get the path to where the tool will be installed. This is where the go.mod file will be.
 	fp, err := t.Filepath()
 	if err != nil {
 		return t, err
@@ -168,160 +165,107 @@ func (c *Cache) download(ctx context.Context, t tool.Tool) (tool.Tool, error) {
 	modDir := filepath.Join(c.toolsDir(), fp)
 	modfilePath := filepath.Join(modDir, "go.mod")
 
-	// If we have the version the process is pretty easy
+	// If we have the version see if the tool already exists and whether or not we need to re-download it.
+	// If any validations fail, the tool will be re-downloaded. This allows shed to recover from a bad state.
 	if t.HasSemver() {
-		if util.FileOrDirExists(modfilePath) {
-			// If go.mod already exists, make sure there's no issues with it
-			data, err := os.ReadFile(modfilePath)
-			if err != nil {
-				return t, errors.Wrapf(err, "failed to read file %q", modfilePath)
-			}
-
-			modFile, err := modfile.Parse(modfilePath, data, nil)
-			if err != nil {
-				return t, errors.Wrapf(err, "failed to parse go.mod file %q", modfilePath)
-			}
-
-			modfileOK := true
-			// There should only be a single require, otherwise something is wrong
-			if len(modFile.Require) != 1 {
-				modfileOK = false
-				c.logger.Debugf("expected 1 required statement in go.mod, found %d", len(modFile.Require))
-			}
-
-			// TODO(@cszatmary): This blows up if the modfile has 0 require statements, fix this ASAP
-			// Also try to simplify some of the logic in this function if possible
+		modFile, err := readGoModFile(op, errors.BadState, modfilePath, t)
+		if modFile != nil {
+			// Perform some additional validations specific to download
 			mod := modFile.Require[0].Mod
-			// Use contains since actual module could have less then what we are installing
-			// Ex: golang.org/x/tools vs golang.org/x/tools/cmd/stringer
-			if !strings.Contains(t.ImportPath, mod.Path) {
-				modfileOK = false
-				c.logger.WithFields(logrus.Fields{
-					"expected": t.ImportPath,
-					"received": mod.Path,
-				}).Debug("incorrect dependency in go.mod")
-			}
-
+			modfileOk := true
 			if t.Version != mod.Version {
-				modfileOK = false
+				modfileOk = false
 				c.logger.WithFields(logrus.Fields{
 					"expected": t.Version,
 					"received": mod.Version,
 				}).Debug("incorrect dependency version go.mod")
 			}
-
-			if modfileOK {
+			if modfileOk {
 				c.logger.WithFields(logrus.Fields{
 					"tool": t,
 				}).Debug("tool already exists, skipping download")
 				return t, nil
 			}
-
+			// Invalid modfile, fallthrough to error case below
+		}
+		if modFile == nil && err == nil {
 			c.logger.WithFields(logrus.Fields{
 				"tool": t,
-			}).Debug("tool exists but issues found, re-downloading")
-
-			if err := os.Remove(modfilePath); err != nil {
-				return t, errors.Wrapf(err, "failed to remove file %q", modfilePath)
+			}).Debug("tool does not exist, downloading")
+		} else {
+			fields := logrus.Fields{"tool": t}
+			if err != nil {
+				fields["error"] = err
 			}
+			c.logger.WithFields(fields).Debug("tool exists but issues found, re-downloading")
 		}
-
-		if err := os.MkdirAll(modDir, 0o755); err != nil {
-			return t, errors.Wrapf(err, "failed to create directory %q", modDir)
-		}
-
-		// Create empty go.mod file so we can install module
-		// Can just use _ as the module name since this is a "fake" module
-		err = createGoModFile("_", modDir)
-		if err != nil {
-			return t, err
-		}
-
-		// Download the module source. What's nice here is we leverage the power of
-		// go get so we don't need to reinvent the module resolution & downloading.
-		// Also we can reuse an existing download that's already cached.
-
-		err = c.goClient.GetD(ctx, t.Module(), modDir)
-		if err != nil {
-			return t, err
-		}
-
-		c.logger.WithFields(logrus.Fields{
-			"tool":    t,
-			"srcPath": modDir,
-		}).Debug("downloaded tool")
-		return t, nil
 	}
 
-	// Don't have the version, this process is a bit more complicated because
-	// we need to resolve the correct version.
+	// Start download process
 
 	if err := os.MkdirAll(modDir, 0o755); err != nil {
-		return t, errors.Wrapf(err, "failed to create directory %q", modDir)
+		return t, errors.New(errors.IO, fmt.Sprintf("failed to create directory %q", modDir), op, err)
 	}
 
-	// If modfile already exists, delete it and create a fresh one to be safe since
-	// it's likely a leftover that wasn't cleaned up properly
-	if util.FileOrDirExists(modfilePath) {
-		err := os.Remove(modfilePath)
-		if err != nil {
-			return t, errors.Wrapf(err, "failed to remove file %q", modfilePath)
-		}
+	// If modfile already exists, delete it and create a fresh one.
+	// The existing modfile is either a leftover that wasn't cleaned up properly,
+	// or it was found to be invalid above so we need to start from scratch.
+	if err := os.RemoveAll(modfilePath); err != nil {
+		return t, errors.New(errors.IO, fmt.Sprintf("failed to remove file %q", modfilePath), op, err)
 	}
 
-	// Create empty go.mod file so we can download the tool
-	// Can just use _ as the module name since this is a "fake" module
-	err = createGoModFile("_", modDir)
-	if err != nil {
+	// Create empty go.mod file so we can download the tool.
+	// Can just use _ as the module name since this is a "fake" module.
+	if err := createGoModFile(op, "_", modDir); err != nil {
 		return t, err
 	}
 
-	// Download the module source. This will do the heavy lifting to figure out
-	// the correct version.
-	err = c.goClient.GetD(ctx, t.Module(), modDir)
-	if err != nil {
+	// Download the module source. What's nice here is we leverage the power of
+	// go get so we don't need to reinvent the module resolution & downloading.
+	// Also we can reuse an existing download that's already cached.
+	if err := c.goClient.GetD(ctx, t.Module(), modDir); err != nil {
 		return t, err
 	}
 
 	// Need to read go.mod file so we can figure out what version was installed
-	data, err := os.ReadFile(modfilePath)
-	if err != nil {
-		return t, errors.Wrapf(err, "failed to read file %q", modfilePath)
-	}
-
-	modFile, err := modfile.Parse(modfilePath, data, nil)
-	if err != nil {
-		return t, errors.Wrapf(err, "failed to parse go.mod file %q", modfilePath)
-	}
-
-	// There should only be a single require, otherwise we have a bug
-	if len(modFile.Require) != 1 {
-		return t, errors.Errorf("expected 1 required statement in go.mod, found %d", len(modFile.Require))
-	}
-	t.Version = modFile.Require[0].Mod.Version
-
-	// We got the version, now we need to rename the dir so it includes the version
-	vfp, err := t.Filepath()
+	modFile, err := readGoModFile(op, errors.Internal, modfilePath, t)
 	if err != nil {
 		return t, err
 	}
-
-	modVersionDir := filepath.Join(c.toolsDir(), vfp)
-	if util.FileOrDirExists(modVersionDir) {
-		// This version was already installed
-		// We can leave the current dir, since future latest installs will
-		// make use of it
-		return t, nil
+	if modFile == nil {
+		// Shouldn't happen, but handle just to be safe.
+		return t, errors.New(errors.Internal, fmt.Sprintf("modfile is missing for installed tool %s", t), op)
 	}
 
-	err = os.Rename(modDir, modVersionDir)
-	if err != nil {
-		return t, errors.Wrapf(err, "failed to rename %q to %q", modDir, modVersionDir)
+	version := modFile.Require[0].Mod.Version
+	toolDir := modDir
+	if t.HasSemver() {
+		// Make sure we actually got the version we asked for
+		if version != t.Version {
+			return t, errors.New(errors.Internal, fmt.Sprintf("incorrect version of tool %s was installed, got %s", t, version), op)
+		}
+	} else {
+		// We got the version, now we need to rename the dir so it includes the version
+		t.Version = version
+		vfp, err := t.Filepath()
+		if err != nil {
+			return t, err
+		}
+
+		modVersionDir := filepath.Join(c.toolsDir(), vfp)
+		if !util.FileOrDirExists(modVersionDir) {
+			if err := os.Rename(modDir, modVersionDir); err != nil {
+				return t, errors.New(errors.IO, fmt.Sprintf("failed to rename %q to %q", modDir, modVersionDir), op, err)
+			}
+		}
+		// If a dir already exists for this version do nothing.
+		// We can leave the current dir since future installs might make use of it.
+		toolDir = modVersionDir
 	}
 
 	c.logger.WithFields(logrus.Fields{
 		"tool": t,
-		"path": modVersionDir,
+		"path": toolDir,
 	}).Debug("downloaded tool")
 	return t, nil
 }
@@ -333,10 +277,13 @@ func (c *Cache) ToolPath(t tool.Tool) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
 	binPath := filepath.Join(c.toolsDir(), bfp)
 	if !util.FileOrDirExists(binPath) {
-		return "", errors.Wrapf(ErrToolNotInstalled, "binary for tool %s does not exist", t)
+		return "", errors.New(
+			errors.NotInstalled,
+			fmt.Sprintf("binary for tool %s does not exist", t),
+			errors.Op("Cache.ToolPath"),
+		)
 	}
 	return binPath, nil
 }
@@ -344,6 +291,7 @@ func (c *Cache) ToolPath(t tool.Tool) (string, error) {
 // FindUpdate checks if there is a newer version available for tool t.
 // If no newer version is found, an empty string is returned.
 func (c *Cache) FindUpdate(ctx context.Context, t tool.Tool) (string, error) {
+	const op = errors.Op("Cache.FindUpdate")
 	fp, err := t.Filepath()
 	if err != nil {
 		return "", err
@@ -354,34 +302,22 @@ func (c *Cache) FindUpdate(ctx context.Context, t tool.Tool) (string, error) {
 	}).Debug("finding module that tool belongs to")
 	dir := filepath.Join(c.toolsDir(), fp)
 	modfilePath := filepath.Join(dir, "go.mod")
-	data, err := os.ReadFile(modfilePath)
-	if os.IsNotExist(err) {
-		return "", errors.Wrapf(ErrToolNotInstalled, "tool %s does not exist", t)
-	} else if err != nil {
-		return "", errors.Wrapf(err, "failed to read %s", modfilePath)
-	}
-
-	modFile, err := modfile.Parse(modfilePath, data, nil)
+	modFile, err := readGoModFile(op, errors.BadState, modfilePath, t)
 	if err != nil {
-		return "", errors.Wrapf(err, "failed to parse go.mod file %s", modfilePath)
+		return "", err
 	}
-	// Check some invariants just to be safe
-	// TODO(@cszatmary): Need an error that represents a bad modfile, can alert users to run 'shed install' to fix
-	if len(modFile.Require) != 1 {
-		return "", errors.Errorf("expected 1 dependency in modfile at %s but found %d", dir, len(modFile.Require))
-	}
-	m := modFile.Require[0].Mod
-	if !strings.HasPrefix(t.ImportPath, m.Path) {
-		return "", errors.Errorf("unexpected module %s in modfile for tool %s", m, t)
+	if modFile == nil {
+		return "", errors.New(errors.NotInstalled, fmt.Sprintf("tool %s does not exist", t), op)
 	}
 
+	m := modFile.Require[0].Mod
 	c.logger.WithFields(logrus.Fields{
 		"tool":   t,
 		"module": m,
 	}).Debug("finding latest version of tool")
 	gm, err := c.goClient.ListU(ctx, m.Path, dir)
 	if err != nil {
-		return "", errors.Wrapf(err, "failed to list module update for %s", m.Path)
+		return "", errors.New(fmt.Sprintf("failed to list module update for %s", m.Path), op, err)
 	}
 	if gm.Update == nil {
 		return "", nil

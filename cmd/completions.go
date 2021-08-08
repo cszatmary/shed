@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newCompletionsCommand(c *container) *cobra.Command {
+func newCompletionsCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:       "completions <shell>",
 		Args:      cobra.ExactArgs(1),
@@ -29,7 +29,13 @@ For example to generate and use bash completions:
 			case "zsh":
 				err = cmd.Root().GenZshCompletion(os.Stdout)
 			default:
-				c.exitf(nil, "Invalid shell value %q. Run 'shed completions --help' to see supported shells.", shell)
+				return &exitError{
+					code: 1,
+					msg: fmt.Sprintf(
+						"Invalid shell value %q. Run 'shed completions --help' to see supported shells.",
+						shell,
+					),
+				}
 			}
 			if err != nil {
 				return fmt.Errorf("failed to generate %s completions: %w", shell, err)

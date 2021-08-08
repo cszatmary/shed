@@ -37,13 +37,19 @@ Or:
 			binPath, err := c.shed.ToolPath(toolName)
 			// Handle special cases that are specific to run as they would be difficult for the global error handler to deal with.
 			if errors.Is(err, lockfile.ErrNotFound) {
-				c.exitf(nil, "No tool named %s installed. Run 'shed get' first to install the tool.", toolName)
+				return &exitError{
+					code: 1,
+					msg:  fmt.Sprintf("No tool named %s installed. Run 'shed get' first to install the tool.", toolName),
+				}
 			}
 			if errors.Is(err, lockfile.ErrMultipleTools) {
-				c.exitf(nil, "Multiple tools named %s found. Specify the full import path of the tool in order to run it.", toolName)
+				return &exitError{
+					code: 1,
+					msg:  fmt.Sprintf("Multiple tools named %s found. Specify the full import path of the tool in order to run it.", toolName),
+				}
 			}
 			if err != nil {
-				return fmt.Errorf("unable to resolve tool %s: %w", toolName, err)
+				return err
 			}
 			c.logger.WithFields(logrus.Fields{
 				"tool": toolName,

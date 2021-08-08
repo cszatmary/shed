@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/getshiphub/shed/errors"
 	"golang.org/x/mod/module"
 	"golang.org/x/mod/semver"
 )
@@ -65,19 +66,22 @@ func (t Tool) String() string {
 // For details on escaped paths see:
 // https://pkg.go.dev/golang.org/x/mod@v0.4.0/module#hdr-Escaped_Paths
 func (t Tool) Filepath() (string, error) {
+	const op = errors.Op("Tool.Filepath")
 	escapedPath, err := module.EscapePath(t.ImportPath)
 	if err != nil {
-		return "", fmt.Errorf("tool: failed to escape path %q: %w", t.ImportPath, err)
+		// EscapePath only fails if ImportPath is not valid,
+		// so we have a bug as it should have been validated earlier.
+		return "", errors.New(errors.Internal, fmt.Sprintf("failed to escape path %q", t.ImportPath), op, err)
 	}
-
 	if t.Version != "" {
 		escapedVersion, err := module.EscapeVersion(t.Version)
 		if err != nil {
-			return "", fmt.Errorf("tool: failed to escape version %q: %w", t.Version, err)
+			// EscapePath only fails if Version is not a valid SemVer,
+			// so we have a bug as it should have been validated earlier.
+			return "", errors.New(errors.Internal, fmt.Sprintf("failed to escape version %q", t.Version), op, err)
 		}
 		escapedPath += "@" + escapedVersion
 	}
-
 	return filepath.FromSlash(escapedPath), nil
 }
 
@@ -98,7 +102,7 @@ func (t Tool) BinaryFilepath() (string, error) {
 // and it must be prefixed with 'v' (ex: 'v1.2.3'). If a shorthand semantic version
 // is used, it will be canonicalized (ex: 'v1' will become 'v1.0.0').
 func Parse(name string) (Tool, error) {
-	return parseTool(name, true)
+	return parseTool(errors.Op("tool.Parse"), name, true)
 }
 
 // ParseLax is like Parse but does not check that the version is a valid semantic version.
@@ -113,10 +117,10 @@ func Parse(name string) (Tool, error) {
 // the latest version. That is, 'golang/x/tools/cmd/stringer' is functionally
 // equivalent to 'golang/x/tools/cmd/stringer@latest'.
 func ParseLax(name string) (Tool, error) {
-	return parseTool(name, false)
+	return parseTool(errors.Op("tool.ParseLax"), name, false)
 }
 
-func parseTool(name string, strict bool) (Tool, error) {
+func parseTool(op errors.Op, name string, strict bool) (Tool, error) {
 	t := Tool{ImportPath: name}
 
 	// Check if a version/query is provided
@@ -126,13 +130,13 @@ func parseTool(name string, strict bool) (Tool, error) {
 
 		// Make sure there isn't a dangling '@'
 		if t.Version == "" {
-			return t, fmt.Errorf("tool: missing version after '@'")
+			return t, errors.New(errors.Invalid, "missing version after '@'", op)
 		}
 	}
 
 	// Validations
 	if err := module.CheckPath(t.ImportPath); err != nil {
-		return t, fmt.Errorf("tool: invalid import path %q: %w", t.ImportPath, err)
+		return t, errors.New(errors.Invalid, fmt.Sprintf("invalid import path %q", t.ImportPath), op, err)
 	}
 	// Version validation is ignored if not strict
 	if !strict {
@@ -140,7 +144,7 @@ func parseTool(name string, strict bool) (Tool, error) {
 	}
 
 	if !semver.IsValid(t.Version) {
-		return t, fmt.Errorf("tool: invalid version %q: not a semantic version", t.Version)
+		return t, errors.New(errors.Invalid, fmt.Sprintf("not a valid semantic version %q", t.Version), op)
 	}
 	// The semver package allows vMAJOR and vMAJOR.MINOR as shorthands.
 	// Use the canonical version to ensure it is a full semantic version.

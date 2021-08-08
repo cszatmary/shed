@@ -9,6 +9,7 @@ import (
 
 	"github.com/getshiphub/shed/cache"
 	"github.com/getshiphub/shed/client"
+	"github.com/getshiphub/shed/errors"
 	"github.com/getshiphub/shed/internal/util"
 	"github.com/getshiphub/shed/lockfile"
 	"github.com/getshiphub/shed/tool"
@@ -336,9 +337,9 @@ func TestGetError(t *testing.T) {
 		"golangci-lint",
 		"github.com/Shopify/ejson/cmd/ejson@v1.2.2",
 	)
-	errList, ok := err.(lockfile.ErrorList)
+	errList, ok := err.(errors.List)
 	if !ok {
-		t.Errorf("want error to be lockfile.ErrorList, got %s: %T", err, err)
+		t.Errorf("want error to be errors.List, got %s: %T", err, err)
 	}
 	wantLen := 1
 	if len(errList) != wantLen {
