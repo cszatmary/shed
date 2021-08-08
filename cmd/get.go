@@ -9,7 +9,11 @@ import (
 )
 
 func newGetCommand(c *container) *cobra.Command {
-	return &cobra.Command{
+	var getOpts struct {
+		concurrency int
+	}
+
+	getCmd := &cobra.Command{
 		Use:   "get [tools...]",
 		Args:  cobra.ArbitraryArgs,
 		Short: "Install Go tools.",
@@ -44,10 +48,19 @@ Uninstall a tool:
 
 	shed get golang.org/x/tools/cmd/stringer@none`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if getOpts.concurrency < 0 {
+				return &exitError{
+					code: 1,
+					msg:  "Concurrency value must be a positive integer.",
+					err:  fmt.Errorf(`invalid value %d for concurrency flag`, getOpts.concurrency),
+				}
+			}
+
 			installSet, err := c.shed.Get(args...)
 			if err != nil {
 				return fmt.Errorf("unable to determine list of tools to install: %w", err)
 			}
+			installSet.Concurrency = uint(getOpts.concurrency)
 
 			s := spinner.NewTTY(spinner.TTYOptions{
 				Options: spinner.Options{
@@ -81,4 +94,7 @@ Uninstall a tool:
 			return nil
 		},
 	}
+
+	getCmd.Flags().IntVarP(&getOpts.concurrency, "concurrency", "c", 0, "amount of tasks to run concurrently (default: number of CPUs)")
+	return getCmd
 }

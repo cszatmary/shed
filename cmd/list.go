@@ -10,6 +10,7 @@ import (
 func newListCommand(c *container) *cobra.Command {
 	var listOpts struct {
 		showUpdates bool
+		concurrency int
 	}
 
 	listCmd := &cobra.Command{
@@ -25,8 +26,17 @@ For example, 'shed list -u' might print:
 
 	golang.org/x/tools/cmd/stringer v0.1.0 [v0.1.5]`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if listOpts.concurrency < 0 {
+				return &exitError{
+					code: 1,
+					msg:  "Concurrency value must be a positive integer.",
+					err:  fmt.Errorf(`invalid value %d for concurrency flag`, listOpts.concurrency),
+				}
+			}
+
 			tools, err := c.shed.List(cmd.Context(), client.ListOptions{
 				ShowUpdates: listOpts.showUpdates,
+				Concurrency: uint(listOpts.concurrency),
 			})
 			if err != nil {
 				return err
@@ -43,5 +53,6 @@ For example, 'shed list -u' might print:
 	}
 
 	listCmd.Flags().BoolVarP(&listOpts.showUpdates, "updates", "u", false, "show latest available version for each tool")
+	listCmd.Flags().IntVarP(&listOpts.concurrency, "concurrency", "c", 0, "amount of tasks to run concurrently (default: number of CPUs)")
 	return listCmd
 }

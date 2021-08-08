@@ -41,6 +41,15 @@ type Lockfile struct {
 	// with the same name. In this case the full import path is required
 	// to determine which tool to grab from the bucket.
 	tools map[string][]tool.Tool
+	// lenTools stores the number of tools in the lockfile. It is stored
+	// so that the length can be retrieved in O(1) instead of having to
+	// iterate through the whole lockfile.
+	lenTools int
+}
+
+// LenTools returns the number of tools stored in the lockfile.
+func (lf *Lockfile) LenTools() int {
+	return lf.lenTools
 }
 
 // GetTool retrieves the tool with the given name from the lockfile.
@@ -129,6 +138,7 @@ func (lf *Lockfile) PutTool(t tool.Tool) error {
 	// No existing one found, add new one
 	if foundIndex == -1 {
 		bucket = append(bucket, t)
+		lf.lenTools++
 	}
 	lf.tools[toolName] = bucket
 	return nil
@@ -163,6 +173,7 @@ func (lf *Lockfile) DeleteTool(t tool.Tool) {
 	// tool, then resize the slice to drop the last element
 	bucket[foundIndex] = bucket[len(bucket)-1]
 	bucket = bucket[:len(bucket)-1]
+	lf.lenTools--
 
 	// If bucket is empty, delete it from the map, since no tools with this name exist anymore
 	if len(bucket) == 0 {
@@ -306,6 +317,7 @@ func Parse(r io.Reader) (*Lockfile, error) {
 		bucket := lf.tools[toolName]
 		bucket = append(bucket, t)
 		lf.tools[toolName] = bucket
+		lf.lenTools++
 	}
 
 	if len(errs) > 0 {

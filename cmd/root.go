@@ -37,12 +37,10 @@ func Execute() {
 
 	cmd, err := rootCmd.ExecuteContextC(ctx)
 	if errors.Is(err, context.Canceled) {
-		fmt.Fprintln(os.Stderr, "\nOperation cancelled")
-		os.Exit(130)
+		c.exitf(130, nil, "\nOperation cancelled")
 	}
 	if ee, ok := err.(*exitError); ok {
-		fmt.Fprintln(os.Stderr, ee.msg)
-		os.Exit(ee.code)
+		c.exitf(ee.code, ee.err, ee.msg)
 	}
 	if rootErr := errors.Root(err); rootErr != nil {
 		// Determine a message to show the user to offer help/suggestions.
@@ -72,10 +70,10 @@ Also try re-running the command with the '--verbose' flag for more details.`,
 			msg = `Try running the command again with the '--verbose' flag for more details.
 If the issue persists, consider reporting it at https://github.com/cszatmary/shed/issues.`
 		}
-		c.exitf(err, msg)
+		c.exitf(1, err, msg)
 	}
 	if err != nil {
-		c.exitf(err, "")
+		c.exitf(1, err, "")
 	}
 }
 
@@ -93,7 +91,7 @@ type container struct {
 
 // exitf prints the given message to stderr then exits the program.
 // It supports printf like formatting. If err is not nil it is also printed.
-func (c *container) exitf(err error, format string, a ...interface{}) {
+func (c *container) exitf(code int, err error, format string, a ...interface{}) {
 	if err != nil {
 		if c.opts.verbose {
 			fmt.Fprintf(os.Stderr, "Error: %+v\n", err)
@@ -112,13 +110,14 @@ func (c *container) exitf(err error, format string, a ...interface{}) {
 			fmt.Fprintln(os.Stderr)
 		}
 	}
-	os.Exit(1)
+	os.Exit(code)
 }
 
 // exitError is used to signal that shed should exit with a given code and message.
 type exitError struct {
 	code int
 	msg  string
+	err  error
 }
 
 func (e *exitError) Error() string {
