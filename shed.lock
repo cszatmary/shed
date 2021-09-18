@@ -4,16 +4,16 @@
       "version": "v0.1.0"
     },
     "github.com/golangci/golangci-lint/cmd/golangci-lint": {
-      "version": "v1.41.1"
+      "version": "v1.42.1"
     },
     "github.com/goreleaser/godownloader": {
       "version": "v0.1.1-0.20200813202458-888d721de8bd"
     },
     "github.com/goreleaser/goreleaser": {
-      "version": "v0.174.2"
+      "version": "v0.179.0"
     },
     "golang.org/x/tools/cmd/goimports": {
-      "version": "v0.1.5"
+      "version": "v0.1.6"
     }
   }
 }
