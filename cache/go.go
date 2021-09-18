@@ -25,6 +25,9 @@ import (
 // instead use GoVersion().
 var goVersion string
 
+// modfileName is the name of the go mod file used.
+const modfileName = "go.mod"
+
 // createGoModFile creates and writes an empty go.mod file at the path referenced by dir.
 // mod is used as the module name. This functions similar to 'go mod init'.
 func createGoModFile(ctx context.Context, op errors.Op, mod, dir string) error {
@@ -42,25 +45,29 @@ func createGoModFile(ctx context.Context, op errors.Op, mod, dir string) error {
 		return errors.New(errors.Go, "failed to add go statement to modfile", op, err)
 	}
 
+	modfilePath := filepath.Join(dir, modfileName)
+	return writeGoModFile(op, modFile, modfilePath)
+}
+
+// writeGoModFile formats and writes modFile to modfilePath.
+func writeGoModFile(op errors.Op, modFile *modfile.File, modfilePath string) error {
 	data, err := modFile.Format()
 	if err != nil {
-		return errors.New(errors.Go, "failed to format modfile", op, err)
+		return errors.New(errors.Go, fmt.Sprintf("failed to format modfile %s", modfilePath), op, err)
 	}
-	modfilePath := filepath.Join(dir, "go.mod")
 	if err := os.WriteFile(modfilePath, data, 0o644); err != nil {
 		return errors.New(errors.IO, fmt.Sprintf("failed to write modfile to %s", modfilePath), op, err)
 	}
 	return nil
 }
 
-// readGoModFile reads the go.mod file at path modfilePath. It also validates the modfile to ensure
-// it only has 1 dependency and that the dependency is for the tool t.
+// readGoModFile reads the go.mod file at path modfilePath.
 //
-// kind is used to categorize errors that occur while parsing or validating the modfile.
+// kind is used to categorize errors that occur while parsing the modfile.
 //
 // If no modfile exists at modfilePath, both return values will be nil. If the returned error
-// is non-nil, the returned modfile will be nil.
-func readGoModFile(op errors.Op, kind errors.Kind, modfilePath string, t tool.Tool) (*modfile.File, error) {
+// is non-nil, then returned modfile will be nil.
+func readGoModFile(op errors.Op, kind errors.Kind, modfilePath string) (*modfile.File, error) {
 	data, err := os.ReadFile(modfilePath)
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -72,21 +79,38 @@ func readGoModFile(op errors.Op, kind errors.Kind, modfilePath string, t tool.To
 	if err != nil {
 		return nil, errors.New(kind, fmt.Sprintf("failed to parse modfile %s", modfilePath), op, err)
 	}
+	return modFile, nil
+}
 
+// readGoModFile reads the go.mod file at path modfilePath. It also validates the modfile to ensure
+// it only has 1 dependency and that the dependency is for the tool t.
+//
+// kind is used to categorize errors that occur while parsing or validating the modfile.
+//
+// If no modfile exists at modfilePath, both return values will be nil. If the returned error
+// is non-nil, the returned modfile will be nil.
+
+// getModule finds the module that provides tool t from the modfile.
+func getModule(op errors.Op, kind errors.Kind, modFile *modfile.File, t tool.Tool) (module.Version, error) {
 	// Validation checks
-
-	// There should only be a single require, otherwise something is wrong
-	if len(modFile.Require) != 1 {
-		msg := fmt.Sprintf("expected 1 require statement in modfile %s but found %d", modfilePath, len(modFile.Require))
-		return nil, errors.New(kind, msg, op)
+	// There should only be a single direct require, otherwise something is wrong
+	var directRequires []*modfile.Require
+	for _, r := range modFile.Require {
+		if !r.Indirect {
+			directRequires = append(directRequires, r)
+		}
 	}
-	mod := modFile.Require[0].Mod
+	if len(directRequires) != 1 {
+		msg := fmt.Sprintf("expected 1 direct require statement in modfile but found %d", len(directRequires))
+		return module.Version{}, errors.New(kind, msg, op)
+	}
+	mod := directRequires[0].Mod
 	// Check prefix since actual module could have less then what we are installing
 	// Ex: golang.org/x/tools vs golang.org/x/tools/cmd/stringer
 	if !strings.HasPrefix(t.ImportPath, mod.Path) {
-		return nil, errors.New(kind, fmt.Sprintf("incorrect dependency in modfile, found %s", mod.Path), op)
+		return mod, errors.New(kind, fmt.Sprintf("incorrect dependency in modfile, found %s", mod.Path), op)
 	}
-	return modFile, nil
+	return mod, nil
 }
 
 // GoVersion finds the version of Go that is installed.
@@ -291,29 +315,21 @@ func (mg *mockGo) GetD(ctx context.Context, mod, dir string) error {
 		}
 	}
 
-	modfilePath := filepath.Join(dir, "go.mod")
-	data, err := os.ReadFile(modfilePath)
-	if os.IsNotExist(err) {
+	modfilePath := filepath.Join(dir, modfileName)
+	modFile, err := readGoModFile(op, errors.Internal, modfilePath)
+	if err != nil {
+		return err
+	}
+	if modFile == nil {
 		// Treat no go.mod as an error because it is required for shed to work properly.
 		// If there is no go.mod then go get will function in non-module mode which we don't want.
 		return errors.New(errors.Internal, fmt.Sprintf("failed to download %s, no go.mod file found at %s", mod, dir), op)
-	} else if err != nil {
-		return errors.New(errors.IO, fmt.Sprintf("failed to read %s", modfilePath), op, err)
-	}
-
-	modFile, err := modfile.Parse(modfilePath, data, nil)
-	if err != nil {
-		return errors.New(errors.Internal, fmt.Sprintf("failed to parse go.mod file %s", modfilePath), op, err)
 	}
 
 	// Add resolved module to go.mod
 	modFile.AddNewRequire(modver.Path, modver.Version, true)
-	newData, err := modFile.Format()
-	if err != nil {
-		return errors.New(errors.Go, fmt.Sprintf("failed to format modfile %s", modfilePath), op, err)
-	}
-	if err = os.WriteFile(modfilePath, newData, 0o644); err != nil {
-		return errors.New(errors.IO, fmt.Sprintf("failed to write modfile %s", modfilePath), op, err)
+	if err := writeGoModFile(op, modFile, modfilePath); err != nil {
+		return err
 	}
 	return nil
 }
@@ -321,31 +337,31 @@ func (mg *mockGo) GetD(ctx context.Context, mod, dir string) error {
 func (mg mockGo) ListU(ctx context.Context, mod, dir string) (GoModule, error) {
 	const op = "mockGo.ListU"
 	var gm GoModule
-	modfilePath := filepath.Join(dir, "go.mod")
-	data, err := os.ReadFile(modfilePath)
-	if os.IsNotExist(err) {
+	modfilePath := filepath.Join(dir, modfileName)
+	modFile, err := readGoModFile(op, errors.Internal, modfilePath)
+	if err != nil {
+		return gm, err
+	}
+	if modFile == nil {
 		// Treat no go.mod as an error because it is required for shed to work properly.
 		return gm, errors.New(errors.Internal, fmt.Sprintf("no go.mod file found at %s", dir), op)
-	} else if err != nil {
-		return gm, errors.New(errors.IO, fmt.Sprintf("failed to read %s", modfilePath), op, err)
 	}
 
-	modFile, err := modfile.Parse(modfilePath, data, nil)
-	if err != nil {
-		return gm, errors.New(errors.Internal, fmt.Sprintf("failed to parse go.mod file %s", modfilePath), op, err)
+	var r *modfile.Require
+	found := false
+	for _, rr := range modFile.Require {
+		if rr.Mod.Path == mod {
+			r = rr
+			found = true
+		}
 	}
-	if len(modFile.Require) != 1 {
-		msg := fmt.Sprintf("expected 1 dependency in modfile at %s but found %d", dir, len(modFile.Require))
-		return gm, errors.New(errors.Internal, msg, op, err)
-	}
-
-	r := modFile.Require[0]
-	if r.Mod.Path != mod {
+	if !found {
 		return gm, errors.New(errors.Invalid, fmt.Sprintf("module %s is not a known dependency", mod), op)
 	}
+
 	// Find the matching module, can't do fast lookup since we don't have the tool import path
 	var latest string
-	found := false
+	found = false
 	for _, m := range mg.registry {
 		if m.name == r.Mod.Path {
 			latest = m.versions[len(m.versions)-1]
