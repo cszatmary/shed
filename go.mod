@@ -3,11 +3,11 @@ module github.com/cszatmary/shed
 go 1.17
 
 require (
-	github.com/mattn/go-isatty v0.0.13
+	github.com/mattn/go-isatty v0.0.14
 	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/cobra v1.2.1
 	golang.org/x/mod v0.5.0
-	golang.org/x/sys v0.0.0-20210906170528-6f6e22806c34 // indirect
+	golang.org/x/sys v0.0.0-20210917161153-d61c044b1678 // indirect
 )
 
 require (
