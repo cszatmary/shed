@@ -10,11 +10,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/cszatmary/shed/errors"
 	"github.com/cszatmary/shed/internal/util"
 	"github.com/cszatmary/shed/tool"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/mod/module"
 )
 
 // Cache manages tools in an OS filesystem directory.
@@ -163,30 +165,33 @@ func (c *Cache) download(ctx context.Context, op errors.Op, t tool.Tool) (tool.T
 		return t, err
 	}
 	modDir := filepath.Join(c.toolsDir(), fp)
-	modfilePath := filepath.Join(modDir, "go.mod")
+	modfilePath := filepath.Join(modDir, modfileName)
 
 	// If we have the version see if the tool already exists and whether or not we need to re-download it.
 	// If any validations fail, the tool will be re-downloaded. This allows shed to recover from a bad state.
 	if t.HasSemver() {
-		modFile, err := readGoModFile(op, errors.BadState, modfilePath, t)
+		modFile, err := readGoModFile(op, errors.BadState, modfilePath)
 		if modFile != nil {
 			// Perform some additional validations specific to download
-			mod := modFile.Require[0].Mod
-			modfileOk := true
-			if t.Version != mod.Version {
-				modfileOk = false
-				c.logger.WithFields(logrus.Fields{
-					"expected": t.Version,
-					"received": mod.Version,
-				}).Debug("incorrect dependency version go.mod")
+			var mod module.Version
+			mod, err = getModule(op, errors.BadState, modFile, t)
+			if err == nil {
+				modfileOk := true
+				if t.Version != mod.Version {
+					modfileOk = false
+					c.logger.WithFields(logrus.Fields{
+						"expected": t.Version,
+						"received": mod.Version,
+					}).Debug("incorrect dependency version go.mod")
+				}
+				if modfileOk {
+					c.logger.WithFields(logrus.Fields{
+						"tool": t,
+					}).Debug("tool already exists, skipping download")
+					return t, nil
+				}
+				// Invalid modfile, fallthrough to error case below
 			}
-			if modfileOk {
-				c.logger.WithFields(logrus.Fields{
-					"tool": t,
-				}).Debug("tool already exists, skipping download")
-				return t, nil
-			}
-			// Invalid modfile, fallthrough to error case below
 		}
 		if modFile == nil && err == nil {
 			c.logger.WithFields(logrus.Fields{
@@ -228,7 +233,7 @@ func (c *Cache) download(ctx context.Context, op errors.Op, t tool.Tool) (tool.T
 	}
 
 	// Need to read go.mod file so we can figure out what version was installed
-	modFile, err := readGoModFile(op, errors.Internal, modfilePath, t)
+	modFile, err := readGoModFile(op, errors.Internal, modfilePath)
 	if err != nil {
 		return t, err
 	}
@@ -237,16 +242,31 @@ func (c *Cache) download(ctx context.Context, op errors.Op, t tool.Tool) (tool.T
 		return t, errors.New(errors.Internal, fmt.Sprintf("modfile is missing for installed tool %s", t), op)
 	}
 
-	version := modFile.Require[0].Mod.Version
-	toolDir := modDir
+	// Need to find the installed module matching the tool. Since Go 1.17 there may be multiple requires
+	// so do our best to find the right one.
+	var mod module.Version
+	found := false
+	for _, r := range modFile.Require {
+		// Check prefix since actual module could have less then what we are installing
+		// Ex: golang.org/x/tools vs golang.org/x/tools/cmd/stringer
+		if strings.HasPrefix(t.ImportPath, r.Mod.Path) {
+			mod = r.Mod
+			found = true
+			break
+		}
+	}
+	if !found {
+		return t, errors.New(errors.Internal, fmt.Sprintf("no installed module found matching tool %s", t), op)
+	}
+
 	if t.HasSemver() {
 		// Make sure we actually got the version we asked for
-		if version != t.Version {
-			return t, errors.New(errors.Internal, fmt.Sprintf("incorrect version of tool %s was installed, got %s", t, version), op)
+		if mod.Version != t.Version {
+			return t, errors.New(errors.Internal, fmt.Sprintf("incorrect version of tool %s was installed, got %s", t, mod.Version), op)
 		}
 	} else {
 		// We got the version, now we need to rename the dir so it includes the version
-		t.Version = version
+		t.Version = mod.Version
 		vfp, err := t.Filepath()
 		if err != nil {
 			return t, err
@@ -260,12 +280,24 @@ func (c *Cache) download(ctx context.Context, op errors.Op, t tool.Tool) (tool.T
 		}
 		// If a dir already exists for this version do nothing.
 		// We can leave the current dir since future installs might make use of it.
-		toolDir = modVersionDir
+		modDir = modVersionDir
+		modfilePath = filepath.Join(modDir, modfileName)
+	}
+
+	// Need to set the module as a direct require.
+	if err := modFile.DropRequire(mod.Path); err != nil {
+		// Should never error but handle just to be safe
+		return t, errors.New(errors.Internal, fmt.Sprintf("failed to drop require for %s", mod.Path), op, err)
+	}
+	modFile.AddNewRequire(mod.Path, mod.Version, false)
+	modFile.Cleanup()
+	if err := writeGoModFile(op, modFile, modfilePath); err != nil {
+		return t, err
 	}
 
 	c.logger.WithFields(logrus.Fields{
 		"tool": t,
-		"path": toolDir,
+		"path": modDir,
 	}).Debug("downloaded tool")
 	return t, nil
 }
@@ -301,23 +333,26 @@ func (c *Cache) FindUpdate(ctx context.Context, t tool.Tool) (string, error) {
 		"tool": t,
 	}).Debug("finding module that tool belongs to")
 	dir := filepath.Join(c.toolsDir(), fp)
-	modfilePath := filepath.Join(dir, "go.mod")
-	modFile, err := readGoModFile(op, errors.BadState, modfilePath, t)
+	modfilePath := filepath.Join(dir, modfileName)
+	modFile, err := readGoModFile(op, errors.BadState, modfilePath)
 	if err != nil {
 		return "", err
 	}
 	if modFile == nil {
 		return "", errors.New(errors.NotInstalled, fmt.Sprintf("tool %s does not exist", t), op)
 	}
+	mod, err := getModule(op, errors.BadState, modFile, t)
+	if err != nil {
+		return "", err
+	}
 
-	m := modFile.Require[0].Mod
 	c.logger.WithFields(logrus.Fields{
 		"tool":   t,
-		"module": m,
+		"module": mod,
 	}).Debug("finding latest version of tool")
-	gm, err := c.goClient.ListU(ctx, m.Path, dir)
+	gm, err := c.goClient.ListU(ctx, mod.Path, dir)
 	if err != nil {
-		return "", errors.New(fmt.Sprintf("failed to list module update for %s", m.Path), op, err)
+		return "", errors.New(fmt.Sprintf("failed to list module update for %s", mod.Path), op, err)
 	}
 	if gm.Update == nil {
 		return "", nil

@@ -33,7 +33,7 @@ You can also install shed using `go get`:
 go get github.com/cszatmary/shed
 ```
 
-Note: Installing from source requires a minimum Go version of 1.16.
+Note: Installing from source requires a minimum Go version of 1.17.
 
 ## Usage
 
