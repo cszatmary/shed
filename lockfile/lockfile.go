@@ -33,23 +33,22 @@ var ErrInvalidVersion = errors.Str("lockfile: tool has invalid version")
 //
 // A zero value Lockfile is a valid empty lockfile ready for use.
 type Lockfile struct {
-	// tools stores the tools managed by this lockfile. Tools are stored
-	// as a map of tool names to buckets of tools with that name.
-	// This allows for quick lookup of a tool by it's short name
-	// instead of doing to need a full search of the whole map.
-	// It also allows for quickly determining if there are multiple tools
-	// with the same name. In this case the full import path is required
-	// to determine which tool to grab from the bucket.
-	tools map[string][]tool.Tool
-	// lenTools stores the number of tools in the lockfile. It is stored
-	// so that the length can be retrieved in O(1) instead of having to
-	// iterate through the whole lockfile.
-	lenTools int
+	// tools stores the tools managed by this lockfile.
+	// Tools are not stored in any particular order, and the
+	// order can change as tools are added and deleted.
+	tools []tool.Tool
+	// nameMap is a map of tool binary names to a list of indices
+	// for each matching tool in tools. This allows for quick lookup
+	// of a tool by its binary name instead of needing to do a linear
+	// search through tools. This also allows for quickly determining
+	// if multiple tools exist with the same binary name, in which
+	// case the full import path is required to retrieve the tool.
+	nameMap map[string][]int
 }
 
 // LenTools returns the number of tools stored in the lockfile.
 func (lf *Lockfile) LenTools() int {
-	return lf.lenTools
+	return len(lf.tools)
 }
 
 // GetTool retrieves the tool with the given name from the lockfile.
@@ -62,7 +61,7 @@ func (lf *Lockfile) LenTools() int {
 // the found version of the tool.
 func (lf *Lockfile) GetTool(name string) (tool.Tool, error) {
 	// Fast way, assume the name is just the tool name and see if we get a match
-	bucket, ok := lf.tools[name]
+	bucket, ok := lf.nameMap[name]
 	if ok {
 		// Tool names must be unique to use the shorthand, otherwise we have no idea
 		// which tool was intended
@@ -70,7 +69,7 @@ func (lf *Lockfile) GetTool(name string) (tool.Tool, error) {
 			err := fmt.Errorf("%w: %d tools named %s found", ErrMultipleTools, len(bucket), name)
 			return tool.Tool{}, err
 		}
-		return bucket[0], nil
+		return lf.tools[bucket[0]], nil
 	}
 
 	// Check if it was short name so we can report not found instead of trying to parse
@@ -85,23 +84,21 @@ func (lf *Lockfile) GetTool(name string) (tool.Tool, error) {
 	}
 
 	toolName := tl.Name()
-	bucket, ok = lf.tools[toolName]
+	bucket, ok = lf.nameMap[toolName]
 	if !ok {
 		return tool.Tool{}, fmt.Errorf("%w: %s", ErrNotFound, toolName)
 	}
 
-	for _, t := range bucket {
+	for _, ti := range bucket {
+		t := lf.tools[ti]
 		if t.ImportPath != tl.ImportPath {
 			continue
 		}
-
 		if tl.Version != "" && tl.Version != t.Version {
 			return t, fmt.Errorf("%w: wanted %s", ErrIncorrectVersion, tl.Version)
 		}
-
 		return t, nil
 	}
-
 	return tool.Tool{}, fmt.Errorf("%w: %s", ErrNotFound, toolName)
 }
 
@@ -110,8 +107,8 @@ func (lf *Lockfile) GetTool(name string) (tool.Tool, error) {
 // t.Version must be a valid SemVer, that is t.HasSemver() must return true.
 // If t.Version is not a valid SemVer, ErrInvalidVersion will be returned.
 func (lf *Lockfile) PutTool(t tool.Tool) error {
-	if lf.tools == nil {
-		lf.tools = make(map[string][]tool.Tool)
+	if lf.nameMap == nil {
+		lf.nameMap = make(map[string][]int)
 	}
 
 	// Invariant check: A tool inserted into the lockfile must have Version set to
@@ -123,24 +120,28 @@ func (lf *Lockfile) PutTool(t tool.Tool) error {
 	toolName := t.Name()
 	// Don't need to check whether or not the bucket exists. If it doesn't we will get
 	// back a nil slice which we can append to
-	bucket := lf.tools[toolName]
+	bucket := lf.nameMap[toolName]
 
-	// Check if the tool already exists and update it
+	// Check if the tool already exists
 	foundIndex := -1
-	for i, tl := range bucket {
+	for _, ti := range bucket {
+		tl := lf.tools[ti]
 		if tl.ImportPath == t.ImportPath {
-			bucket[i] = t
-			foundIndex = i
+			foundIndex = ti
 			break
 		}
 	}
 
-	// No existing one found, add new one
-	if foundIndex == -1 {
-		bucket = append(bucket, t)
-		lf.lenTools++
+	// If an existing tool was found then easy, just update it
+	if foundIndex != -1 {
+		lf.tools[foundIndex] = t
+		return nil
 	}
-	lf.tools[toolName] = bucket
+
+	// No existing one found, add new one
+	// New tool is aways appended to the end so the index is easy
+	lf.nameMap[toolName] = append(bucket, len(lf.tools))
+	lf.tools = append(lf.tools, t)
 	return nil
 }
 
@@ -150,18 +151,21 @@ func (lf *Lockfile) PutTool(t tool.Tool) error {
 // lockfile regardless of version.
 func (lf *Lockfile) DeleteTool(t tool.Tool) {
 	toolName := t.Name()
-	bucket, ok := lf.tools[toolName]
+	bucket, ok := lf.nameMap[toolName]
 	if !ok {
 		return
 	}
 
 	foundIndex := -1
-	for i, tl := range bucket {
+	bucketIndex := -1
+	for i, ti := range bucket {
+		tl := lf.tools[ti]
 		if t.ImportPath != tl.ImportPath {
 			continue
 		}
 		if t.Version == "" || t.Version == tl.Version {
-			foundIndex = i
+			foundIndex = ti
+			bucketIndex = i
 			break
 		}
 	}
@@ -171,16 +175,18 @@ func (lf *Lockfile) DeleteTool(t tool.Tool) {
 
 	// To efficiently delete, simply replace the the tool at the found index with the last
 	// tool, then resize the slice to drop the last element
-	bucket[foundIndex] = bucket[len(bucket)-1]
+	lf.tools[foundIndex] = lf.tools[len(lf.tools)-1]
+	lf.tools = lf.tools[:len(lf.tools)-1]
+	// Use the same technique for the bucket
+	bucket[bucketIndex] = bucket[len(bucket)-1]
 	bucket = bucket[:len(bucket)-1]
-	lf.lenTools--
 
 	// If bucket is empty, delete it from the map, since no tools with this name exist anymore
 	if len(bucket) == 0 {
-		delete(lf.tools, toolName)
+		delete(lf.nameMap, toolName)
 		return
 	}
-	lf.tools[toolName] = bucket
+	lf.nameMap[toolName] = bucket
 }
 
 // Iterator allows for iteration over the tools within a Lockfile.
@@ -192,68 +198,32 @@ func (lf *Lockfile) DeleteTool(t tool.Tool) {
 // from one iteration to the next. It is not safe to add or delete tools from a lockfile
 // during iteration.
 type Iterator struct {
-	lf   *Lockfile
-	keys []string
-	// Index of the current map key
-	i int
-	// Index of the current element in the bucket
-	j int
+	lf *Lockfile
+	i  int
 }
 
 // Iter creates a new Iterator that can be used to iterate over the tools in a Lockfile.
 func (lf *Lockfile) Iter() *Iterator {
-	it := &Iterator{
-		lf:   lf,
-		keys: make([]string, len(lf.tools)),
-		i:    -1,
-	}
-
-	i := 0
-	for k := range lf.tools {
-		it.keys[i] = k
-		i++
-	}
-
-	return it
+	return &Iterator{lf: lf, i: -1}
 }
 
 // Next advances the iterator to the next element. Every call to Value, even the
 // first one, must be preceded by a call to Next.
+//
+// Next returns a bool indicating whether or not a next element exists meaning
+// it is safe to call Value.
 func (it *Iterator) Next() bool {
-	// Start iteration
-	if it.i == -1 {
-		it.i++
-		return len(it.keys) > 0
-	} else if it.i >= len(it.keys) {
-		// Iteration finished
-		return false
-	}
-
-	key := it.keys[it.i]
-	bucket := it.lf.tools[key]
-
-	// Check if we reached the end of the bucket
-	if it.j == len(bucket)-1 {
-		// Move to the next bucket
-		it.i++
-		it.j = 0
-		return it.i < len(it.keys)
-	}
-
-	it.j++
-	return true
+	it.i++
+	return it.i < len(it.lf.tools)
 }
 
 // Value returns the current element in the iterator.
 // Value will panic if iteration has finished.
 func (it *Iterator) Value() tool.Tool {
-	if it.i >= len(it.keys) {
+	if it.i >= len(it.lf.tools) {
 		panic("lockfile.Iterator: out of bounds access")
 	}
-
-	key := it.keys[it.i]
-	bucket := it.lf.tools[key]
-	return bucket[it.j]
+	return it.lf.tools[it.i]
 }
 
 // WriteTo serializes and writes the lockfile to w. It returns the
@@ -261,10 +231,8 @@ func (it *Iterator) Value() tool.Tool {
 func (lf *Lockfile) WriteTo(w io.Writer) (int64, error) {
 	// Convert lockfile to format that can be serialized into JSON
 	lfSchema := lockfileSchema{Tools: make(map[string]toolSchema)}
-	for _, bucket := range lf.tools {
-		for _, t := range bucket {
-			lfSchema.Tools[t.ImportPath] = toolSchema{Version: t.Version}
-		}
+	for _, t := range lf.tools {
+		lfSchema.Tools[t.ImportPath] = toolSchema{Version: t.Version}
 	}
 
 	data, err := json.MarshalIndent(lfSchema, "", "  ")
@@ -282,7 +250,6 @@ func (lf *Lockfile) WriteTo(w io.Writer) (int64, error) {
 	if n != len(data) {
 		return int64(n), io.ErrShortWrite
 	}
-
 	return int64(n), nil
 }
 
@@ -302,7 +269,7 @@ func Parse(r io.Reader) (*Lockfile, error) {
 		return nil, fmt.Errorf("lockfile: failed to deserialize JSON: %w", err)
 	}
 
-	lf := &Lockfile{tools: make(map[string][]tool.Tool)}
+	lf := &Lockfile{nameMap: make(map[string][]int)}
 	// Parse all the tools in the lockfile. If errors are encountered, save
 	// them and continue. This way multiple errors can be reported at once.
 	var errs errors.List
@@ -314,12 +281,10 @@ func Parse(r io.Reader) (*Lockfile, error) {
 		}
 
 		toolName := t.Name()
-		bucket := lf.tools[toolName]
-		bucket = append(bucket, t)
-		lf.tools[toolName] = bucket
-		lf.lenTools++
+		bucket := lf.nameMap[toolName]
+		lf.nameMap[toolName] = append(bucket, len(lf.tools))
+		lf.tools = append(lf.tools, t)
 	}
-
 	if len(errs) > 0 {
 		return nil, errs
 	}
