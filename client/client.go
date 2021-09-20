@@ -416,6 +416,8 @@ func (s *Shed) List(ctx context.Context, opts ListOptions) ([]ToolInfo, error) {
 		select {
 		case r := <-resultCh:
 			if r.err != nil {
+				// Stop any update checks that are still in progress
+				cancel()
 				return nil, r.err
 			}
 			tools = append(tools, r.info)
